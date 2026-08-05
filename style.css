@@ -307,12 +307,18 @@ ul, ol{ list-style:none; }
 .tv-legs{ width:60px; height:14px; background:#0f0f11; margin:0 auto; }
 .intro-skip{ margin-top:22px; color:var(--c-text-dim); font-size:0.75rem; letter-spacing:0.15em; text-transform:uppercase; animation:pulseOpacity 2s infinite; }
 .skip-intro-btn{
-  position:fixed; top:16px; right:16px; z-index:20;
-  padding:8px 14px; font-size:0.7rem; letter-spacing:0.1em;
-  background:rgba(20,4,6,0.75); border:1px solid var(--c-red); color:var(--c-red);
-  text-shadow:0 0 6px var(--c-red-glow);
+  position:fixed; top:20px; right:20px; z-index:30;
+  padding:12px 20px; font-size:0.85rem; font-weight:bold; letter-spacing:0.12em;
+  background:var(--c-red); border:2px solid #fff; color:#fff;
+  border-radius:4px;
+  box-shadow:0 0 18px var(--c-red-glow), 0 4px 14px rgba(0,0,0,0.6);
+  animation:skipPulse 1.6s ease-in-out infinite;
 }
-.skip-intro-btn:hover{ background:var(--c-red); color:#fff; box-shadow:0 0 14px var(--c-red-glow); }
+.skip-intro-btn:hover{ background:#fff; color:var(--c-red); border-color:var(--c-red); box-shadow:0 0 24px var(--c-red-glow); animation:none; }
+@keyframes skipPulse{
+  0%,100%{ transform:scale(1); box-shadow:0 0 18px var(--c-red-glow), 0 4px 14px rgba(0,0,0,0.6); }
+  50%{ transform:scale(1.06); box-shadow:0 0 30px var(--c-red-glow), 0 4px 18px rgba(0,0,0,0.7); }
+}
 @keyframes pulseOpacity{ 50%{ opacity:0.3; } }
 
 /* -- Sala vazia: poeira caindo lentamente atrás do computador -- */
@@ -890,5 +896,5 @@ body.glitching #noise-canvas{ opacity:0.2; }
   .difficulty-meta{ font-size:0.66rem; }
   .tv-frame{ width:min(88vw, 420px); }
   .tv-line{ font-size:1.15rem; }
-  .skip-intro-btn{ top:10px; right:10px; padding:6px 10px; font-size:0.62rem; }
+  .skip-intro-btn{ top:10px; right:10px; padding:9px 14px; font-size:0.68rem; }
 }
