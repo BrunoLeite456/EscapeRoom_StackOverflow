@@ -309,9 +309,10 @@ ul, ol{ list-style:none; }
 .skip-intro-btn{
   position:fixed; top:16px; right:16px; z-index:20;
   padding:8px 14px; font-size:0.7rem; letter-spacing:0.1em;
-  background:rgba(16,16,20,0.7); border:1px solid var(--c-line); color:var(--c-text-dim);
+  background:rgba(20,4,6,0.75); border:1px solid var(--c-red); color:var(--c-red);
+  text-shadow:0 0 6px var(--c-red-glow);
 }
-.skip-intro-btn:hover{ border-color:var(--c-red); color:#fff; }
+.skip-intro-btn:hover{ background:var(--c-red); color:#fff; box-shadow:0 0 14px var(--c-red-glow); }
 @keyframes pulseOpacity{ 50%{ opacity:0.3; } }
 
 /* -- Sala vazia: poeira caindo lentamente atrás do computador -- */
@@ -402,27 +403,115 @@ ul, ol{ list-style:none; }
   background:linear-gradient(180deg, transparent, rgba(0,0,0,0.6) 80%);
 }
 
-.postit-layer{ position:absolute; inset:0; z-index:4; pointer-events:none; }
-.postit-layer .postit{ pointer-events:auto; }
-
 .desk-unit{
   position:relative; z-index:3;
   display:flex; flex-direction:column; align-items:center;
   width:100%;
 }
 
-.monitor-unit{ display:flex; flex-direction:column; align-items:center; width:min(94vw, 760px); }
+/* -- Mesa de madeira: dá chão pro PC, ele para de flutuar -- */
+.desk-plank{
+  position:relative;
+  width:min(96vw, 820px);
+  height:92px;
+  margin-top:-4px;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.07) 0 2px, transparent 2px 30px),
+    linear-gradient(180deg, #8a6238 0%, #6b4a2a 45%, #4a3018 100%);
+  border-radius:4px;
+  border-top:2px solid #a97b46;
+  box-shadow:0 22px 36px rgba(0,0,0,0.55), inset 0 -14px 18px rgba(0,0,0,0.4);
+  z-index:2;
+}
+.desk-plank::after{
+  content:''; position:absolute; left:2%; right:2%; bottom:-7px; height:7px;
+  background:linear-gradient(180deg, rgba(0,0,0,0.45), transparent);
+  border-radius:0 0 4px 4px;
+}
+
+/* -- Objetos da mesa: só decoração em CSS puro -- */
+.prop-mug{
+  position:absolute; top:14px; left:4%;
+  width:20px; height:22px; border-radius:2px 2px 6px 6px;
+  background:linear-gradient(160deg,#3a2f28,#211a16);
+  box-shadow:0 4px 8px rgba(0,0,0,0.5);
+}
+.prop-mug::after{
+  content:''; position:absolute; right:-8px; top:5px;
+  width:9px; height:10px; border:2px solid #3a2f28; border-left:none; border-radius:0 6px 6px 0;
+}
+/* papéis jogados, em ângulos diferentes, como quem largou tudo ali */
+.prop-papers{
+  position:absolute; top:10px; right:5%;
+  width:50px; height:34px;
+  background:linear-gradient(200deg,#d9d3ba,#bcb495);
+  box-shadow:0 3px 6px rgba(0,0,0,0.5);
+  transform:rotate(-8deg);
+}
+.prop-papers::before{
+  content:''; position:absolute; inset:4px; border:1px dashed rgba(0,0,0,0.15);
+}
+.prop-papers-alt{
+  position:absolute; top:20px; right:12%;
+  width:42px; height:28px;
+  background:linear-gradient(200deg,#cfc7a8,#a89e7c);
+  box-shadow:0 3px 6px rgba(0,0,0,0.45);
+  transform:rotate(9deg);
+}
+.prop-pencil{
+  position:absolute; top:24px; right:22%;
+  width:42px; height:4px; border-radius:2px 0 0 2px;
+  background:linear-gradient(90deg,#e0a83a 0%,#e0a83a 82%,#c9c2b0 82%,#c9c2b0 90%,#e8899a 90%);
+  transform:rotate(-22deg);
+  box-shadow:0 2px 4px rgba(0,0,0,0.4);
+}
+
+/* -- Caderninho: bem maior que antes, em destaque em cima da mesa -- */
+.notebook{
+  position:absolute; top:-16px; left:10%;
+  width:60px; height:78px;
+  background:linear-gradient(160deg,#6b5a3f,#40331f);
+  border-radius:2px 5px 5px 2px;
+  box-shadow:0 8px 16px rgba(0,0,0,0.55);
+  display:flex; align-items:center; justify-content:center;
+  transform:rotate(-3deg);
+  z-index:4;
+  transition:transform var(--dur-fast);
+}
+.notebook:hover{ transform:rotate(-3deg) translateY(-4px); }
+.notebook-spiral{
+  position:absolute; left:5px; top:6px; bottom:6px; width:4px;
+  background:repeating-linear-gradient(180deg,#111 0,#111 3px,transparent 3px,transparent 8px);
+  opacity:0.7;
+}
+.notebook-label{ color:var(--c-amber); font-family:var(--font-display); font-size:1.6rem; opacity:0.85; }
+
+.monitor-unit{ display:flex; flex-direction:column; align-items:center; width:min(78vw, 560px); position:relative; z-index:3; }
 .monitor-bezel{
+  position:relative;
   width:100%;
   background:linear-gradient(160deg,#2c2c31,#111114);
   border:2px solid #000;
   border-radius:16px;
   padding:14px 14px 10px;
   box-shadow:0 20px 60px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.03);
+  /* PC já chega surrado: leve amarelado, poeira e sujeira sempre visíveis */
+  filter:saturate(0.92) contrast(0.97);
+  overflow:hidden;
+}
+.monitor-bezel::before{
+  /* grime / poeira acumulada nos cantos, presente desde o início */
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:2;
+  background:
+    radial-gradient(ellipse 60% 40% at 4% 100%, rgba(120,100,40,0.18), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 98% 4%, rgba(120,100,40,0.12), transparent 70%),
+    radial-gradient(1px 1px at 20% 85%, rgba(0,0,0,0.5), transparent),
+    radial-gradient(1px 1px at 70% 12%, rgba(0,0,0,0.4), transparent);
 }
 .monitor-topbar{
   display:flex; align-items:center; justify-content:space-between;
   padding:0 4px 10px;
+  position:relative; z-index:3;
 }
 .monitor-led-strip{ display:flex; gap:4px; }
 .monitor-led-strip::before{ content:''; display:none; }
@@ -435,8 +524,8 @@ ul, ol{ list-style:none; }
 .monitor-screen{
   background:#000;
   border-radius:6px;
-  min-height:min(52vh, 420px);
-  max-height:62vh;
+  min-height:min(48vh, 380px);
+  max-height:58vh;
   overflow-y:auto;
   box-shadow:inset 0 0 50px rgba(0,0,0,0.9);
   position:relative;
@@ -451,10 +540,11 @@ ul, ol{ list-style:none; }
   clip-path:polygon(30% 0, 70% 0, 100% 100%, 0 100%);
 }
 .desk-keyboard{
-  width:min(70vw, 420px); height:16px; margin:10px auto 0;
+  position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+  width:min(50vw, 300px); height:16px;
   background:#131316; border:1px solid #000; border-radius:3px;
   display:flex; align-items:center; gap:6px; padding:0 10px;
-  position:relative; z-index:3;
+  z-index:3;
 }
 
 /* -- LEDs de integridade: fileira de luzinhas no topo do monitor,
@@ -465,27 +555,94 @@ ul, ol{ list-style:none; }
 }
 .integrity-led.lost{ background:#2a2a2e; box-shadow:none; }
 
-/* -- Post-its: dicas com um exemplo de cada categoria, coladas na cena -- */
-.postit{
-  position:absolute;
-  width:clamp(120px, 15vw, 168px);
-  padding:10px 12px;
-  font-family:var(--font-mono);
-  font-size:0.68rem; line-height:1.35;
+/* ==================================================================
+   DANO NO MONITOR — trincas, ruído e glitch ficam confinados ao PC.
+   Uma trinca fina já existe desde o início (aparelho chega quebrado);
+   o resto escala junto com a integridade do projeto.
+   ================================================================== */
+.monitor-fx{ position:absolute; inset:0; z-index:5; pointer-events:none; border-radius:6px; overflow:hidden; }
+.m-scanlines{
+  position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0px, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode:multiply;
+}
+.m-vignette{ position:absolute; inset:0; box-shadow:inset 0 0 60px 14px rgba(0,0,0,0.85); }
+.monitor-noise-canvas{ position:absolute; inset:0; width:100%; height:100%; opacity:0.05; mix-blend-mode:overlay; }
+.m-chromatic{
+  position:absolute; inset:0; opacity:0;
+  background:linear-gradient(90deg, rgba(255,0,60,0.25), transparent 40%, rgba(0,255,255,0.15) 70%);
+  mix-blend-mode:screen;
+}
+.m-cracks{ position:absolute; inset:0; }
+.m-cracks svg{ width:100%; height:100%; }
+.m-crack-path{ fill:none; stroke:rgba(255,255,255,0.65); stroke-width:0.7; filter:drop-shadow(0 0 1px rgba(0,0,0,0.9)); }
+/* baseline: uma trinca já visível desde o começo do jogo */
+.m-crack-a{ opacity:0.4; }
+.m-crack-b{ opacity:0; transition:opacity var(--dur-slow) ease; }
+.m-crack-c{ opacity:0; transition:opacity var(--dur-slow) ease; }
+
+.monitor-unit.corruption-1 .m-crack-a{ opacity:0.7; }
+.monitor-unit.corruption-1 .monitor-noise-canvas{ opacity:0.1; }
+
+.monitor-unit.corruption-2 .m-crack-a{ opacity:0.9; }
+.monitor-unit.corruption-2 .m-crack-b{ opacity:0.6; }
+.monitor-unit.corruption-2 .monitor-noise-canvas{ opacity:0.16; }
+.monitor-unit.corruption-2 .m-vignette{ box-shadow:inset 0 0 70px 18px rgba(120,0,10,0.6); }
+
+.monitor-unit.corruption-3 .m-crack-a, .monitor-unit.corruption-3 .m-crack-b{ opacity:1; }
+.monitor-unit.corruption-3 .m-crack-c{ opacity:0.7; animation:crackPulse 1.4s infinite; }
+.monitor-unit.corruption-3 .monitor-noise-canvas{ opacity:0.26; }
+.monitor-unit.corruption-3 .m-scanlines{ animation:scanJump 1.4s steps(3) infinite; }
+.monitor-unit.corruption-3 .monitor-bezel, .monitor-unit.corruption-3 ~ #architect-log{ animation:pulseOpacity 1.6s infinite; }
+@keyframes crackPulse{ 50%{ opacity:0.25; } }
+
+/* Tremor e glitch localizados no monitor ao errar uma pergunta */
+.monitor-unit.shake{ animation:monitorShake 0.4s; }
+@keyframes monitorShake{
+  0%,100%{ transform:translate(0,0); }
+  15%{ transform:translate(-4px,2px); }
+  30%{ transform:translate(4px,-2px); }
+  45%{ transform:translate(-3px,3px); }
+  60%{ transform:translate(3px,-1px); }
+  75%{ transform:translate(-2px,1px); }
+  90%{ transform:translate(1px,0); }
+}
+.monitor-unit.glitching .m-chromatic{ animation:chromaticGlitch 0.5s steps(2); }
+.monitor-unit.glitching .m-scanlines{ animation:scanJump 0.5s steps(3); }
+
+/* ==================================================================
+   CADERNO DE ANOTAÇÕES — abre por cima de tudo, mostra as dicas de
+   quem esteve aqui antes. O cronômetro continua visível quando aberto.
+   ================================================================== */
+.notebook-overlay{
+  position:fixed; inset:0; z-index:60;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.6);
+  padding:20px;
+}
+.notebook-overlay[hidden]{ display:none; }
+.notebook-page{
+  width:min(92vw, 480px); max-height:80vh;
+  background:linear-gradient(170deg,#e8e0c4,#d8cfab);
   color:#2b2a1f;
-  background:var(--postit-color, #f4e07a);
-  box-shadow:2px 4px 10px rgba(0,0,0,0.5);
-  border-radius:1px;
-  cursor:pointer;
-  transition:transform var(--dur-fast);
-  z-index:5;
+  border-radius:2px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.7);
+  padding:18px 20px;
+  transform:rotate(-1deg);
+  display:flex; flex-direction:column;
+  overflow:hidden;
 }
-.postit:hover{ transform:translateY(-3px) rotate(0deg) !important; }
-.postit-label{ font-weight:bold; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.05em; margin-bottom:4px; display:block; }
-.postit::before{
-  content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%) rotate(-3deg);
-  width:34px; height:14px; background:rgba(255,255,255,0.35);
+.notebook-page-header{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding-bottom:10px; margin-bottom:10px; border-bottom:2px dashed rgba(0,0,0,0.25);
 }
+.notebook-title{ font-size:0.66rem; letter-spacing:0.08em; text-transform:uppercase; color:#5b4a2a; }
+.notebook-timer{ font-family:var(--font-display); font-size:1.2rem; color:#8a1414; }
+.notebook-close{ font-size:1rem; color:#5b4a2a; padding:2px 6px; }
+.notebook-close:hover{ color:#8a1414; }
+.notebook-hints{ overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+.notebook-hint{ font-size:0.86rem; line-height:1.5; }
+.notebook-hint strong{ display:block; text-transform:uppercase; font-size:0.68rem; letter-spacing:0.06em; color:#5b4a2a; margin-bottom:2px; }
 
 /* ==================================================================
    MENSAGEM DO ARQUITETO (rodapé)
@@ -628,7 +785,8 @@ ul, ol{ list-style:none; }
 .victory-actions .menu-btn{ flex:1; text-align:center; }
 
 /* ==================================================================
-   OVERLAYS GLOBAIS — CRT / ruído / glitch / vinheta / neblina
+   OVERLAYS GLOBAIS — CRT / neblina (ambiente, não reagem a dano)
+   O efeito de "quebrado"/corrompido fica só no monitor (ver seção do PC).
    ================================================================== */
 #crt-overlay{ position:fixed; inset:0; pointer-events:none; z-index:100; }
 .scanlines{
@@ -641,44 +799,18 @@ ul, ol{ list-style:none; }
   box-shadow:inset 0 0 180px 40px rgba(0,0,0,0.85);
 }
 #noise-canvas{ position:absolute; inset:0; width:100%; height:100%; opacity:0.035; mix-blend-mode:overlay; }
-.chromatic-flash{
-  position:absolute; inset:0; opacity:0;
-  background:linear-gradient(90deg, rgba(255,0,60,0.25), transparent 40%, rgba(0,255,255,0.15) 70%);
-  mix-blend-mode:screen;
-}
+.chromatic-flash{ display:none; } /* efeito de glitch agora só existe no monitor */
+.screen-cracks{ display:none; } /* trincas agora só existem no monitor */
 
-.screen-cracks{ position:absolute; inset:0; opacity:0; transition:opacity var(--dur-slow) ease; }
-.crack-svg{ width:100%; height:100%; }
-.crack-path{
-  fill:none; stroke:rgba(255,255,255,0.7); stroke-width:0.6;
-  filter:drop-shadow(0 0 1px rgba(0,0,0,0.9));
-  opacity:0;
-}
-.crack-a{ transition:opacity var(--dur-slow) ease; }
-.crack-b{ transition:opacity var(--dur-slow) ease; }
-.crack-c{ transition:opacity var(--dur-slow) ease; }
-
-.dust-layer{ position:absolute; inset:0; opacity:0; background:
+/* Poeira caindo pela sala inteira — ambiente de local abandonado, sempre
+   um pouco visível, não depende de erros cometidos no jogo */
+.dust-layer{ position:absolute; inset:0; opacity:0.3; background:
   radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.5), transparent),
   radial-gradient(1px 1px at 80% 60%, rgba(255,255,255,0.4), transparent),
   radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.35), transparent),
   radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.3), transparent);
-  animation:dustFall 11s linear infinite; transition:opacity var(--dur-slow) ease;
+  animation:dustFall 11s linear infinite;
 }
-
-/* A sala/tela vai se deteriorando fisicamente conforme a integridade cai */
-body.corruption-1 .screen-cracks{ opacity:1; }
-body.corruption-1 .crack-a{ opacity:0.5; }
-body.corruption-1 .dust-layer{ opacity:0.5; }
-
-body.corruption-2 .crack-a{ opacity:0.85; }
-body.corruption-2 .crack-b{ opacity:0.55; }
-body.corruption-2 .dust-layer{ opacity:0.8; }
-
-body.corruption-3 .crack-a, body.corruption-3 .crack-b{ opacity:1; }
-body.corruption-3 .crack-c{ opacity:0.7; animation:crackPulse 1.4s infinite; }
-body.corruption-3 .dust-layer{ opacity:1; }
-@keyframes crackPulse{ 50%{ opacity:0.25; } }
 
 #fog-layer{
   position:fixed; inset:0; pointer-events:none; z-index:2;
@@ -692,7 +824,7 @@ body.corruption-3 .dust-layer{ opacity:1; }
   background:#fff; opacity:0;
 }
 
-/* Screen shake (aplicado no <body>) */
+/* Screen shake (aplicado no <body> em cutscenes, fora da tela de jogo) */
 body.shake{ animation:screenShake 0.4s; }
 @keyframes screenShake{
   0%,100%{ transform:translate(0,0); }
@@ -706,11 +838,6 @@ body.shake{ animation:screenShake 0.4s; }
   80%{ transform:translate(3px,3px); }
   90%{ transform:translate(-2px,0); }
 }
-
-/* Glitch pulse — aplicado no body ao errar */
-body.glitching #crt-overlay .chromatic-flash{
-  animation:chromaticGlitch 0.5s steps(2);
-}
 @keyframes chromaticGlitch{
   0%{ opacity:0; }
   20%{ opacity:1; transform:translateX(-6px); }
@@ -718,20 +845,14 @@ body.glitching #crt-overlay .chromatic-flash{
   60%{ opacity:1; transform:translateX(-3px); }
   100%{ opacity:0; transform:translateX(0); }
 }
-body.glitching .scanlines{ animation:scanJump 0.5s steps(3); }
 @keyframes scanJump{
   0%,100%{ transform:translateY(0); }
   33%{ transform:translateY(4px); }
   66%{ transform:translateY(-4px); }
 }
-
-/* Corrupção crescente conforme integridade cai — controlada via classes no body */
-body.corruption-1 #noise-canvas{ opacity:0.07; }
-body.corruption-2 #noise-canvas{ opacity:0.14; }
-body.corruption-2 .vignette{ box-shadow:inset 0 0 220px 60px rgba(120,0,10,0.55); }
-body.corruption-3 #noise-canvas{ opacity:0.24; }
-body.corruption-3 .scanlines{ animation:scanJump 1.4s steps(3) infinite; }
-body.corruption-3 .monitor-bezel, body.corruption-3 #architect-log{ animation:pulseOpacity 1.6s infinite; }
+/* Glitch em cutscenes (fora da tela de jogo) — só um esbarrão sutil */
+body.glitching .scanlines{ animation:scanJump 0.5s steps(3); }
+body.glitching #noise-canvas{ opacity:0.2; }
 
 /* Blecaute — quando a integridade fica crítica */
 #screen-flash.blackout{ opacity:1; background:#000; transition:opacity 1.2s ease; }
@@ -749,16 +870,18 @@ body.corruption-3 .monitor-bezel, body.corruption-3 #architect-log{ animation:pu
 /* -- Celular deitado (paisagem): o modo pretendido de jogo -- */
 @media (pointer:coarse) and (max-width:900px) and (orientation:landscape){
   .room-scene{ padding:8px; }
-  .monitor-unit{ width:min(92vw, 640px); }
+  .monitor-unit{ width:min(80vw, 460px); }
   .monitor-bezel{ padding:8px 8px 6px; border-radius:10px; }
-  .monitor-screen{ min-height:auto; max-height:56vh; }
+  .monitor-screen{ min-height:auto; max-height:52vh; }
   .qtimer{ font-size:1.2rem; }
   #phase-root{ padding:14px; }
   .question-text{ font-size:1.15rem; margin-bottom:14px; }
-  .desk-keyboard, .monitor-brand{ display:none; }
+  .desk-keyboard, .monitor-brand, .prop-mug, .prop-papers, .prop-papers-alt, .prop-pencil{ display:none; }
+  .desk-plank{ height:56px; }
+  .notebook{ position:fixed; bottom:10px; left:10px; top:auto; width:44px; height:56px; z-index:20; transform:rotate(-3deg); }
   #architect-log{ padding:8px 14px; font-size:0.72rem; }
-  .postit{ width:clamp(88px, 12vw, 120px); font-size:0.58rem; padding:7px 8px; }
   .room-window{ display:none; }
+  .notebook-page{ max-height:88vh; padding:12px 14px; }
 }
 
 /* -- Telas pequenas em geral: reduz o painel de instruções/dificuldade -- */

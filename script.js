@@ -203,39 +203,71 @@
     window.addEventListener('resize', resizeNoise);
     resizeNoise();
 
-    function drawNoiseFrame() {
-      const w = noiseCanvas.width, h = noiseCanvas.height;
-      const imgData = nctx.createImageData(w, h);
+    function drawNoiseFrame(canvas, ctx) {
+      const w = canvas.width, h = canvas.height;
+      if (!w || !h) return;
+      const imgData = ctx.createImageData(w, h);
       const buf = new Uint32Array(imgData.data.buffer);
       for (let i = 0; i < buf.length; i++) {
         const v = (Math.random() * 255) | 0;
         buf[i] = (255 << 24) | (v << 16) | (v << 8) | v;
       }
-      nctx.putImageData(imgData, 0, 0);
+      ctx.putImageData(imgData, 0, 0);
     }
 
     function startNoiseLoop() {
       let last = 0;
       const loop = (t) => {
-        if (t - last > 90) { drawNoiseFrame(); last = t; }
+        if (t - last > 90) { drawNoiseFrame(noiseCanvas, nctx); last = t; }
         noiseRAF = requestAnimationFrame(loop);
       };
       noiseRAF = requestAnimationFrame(loop);
     }
     function stopNoiseLoop() { if (noiseRAF) cancelAnimationFrame(noiseRAF); }
 
-    function shake() {
-      body.classList.remove('shake');
-      void body.offsetWidth; // força reflow para reiniciar animação
-      body.classList.add('shake');
-      setTimeout(() => body.classList.remove('shake'), 420);
+    // -- Ruído dedicado ao monitor do PC (menor, sempre ativo dentro dele) --
+    let monitorNoiseRAF = null;
+    function getMonitorNoise() {
+      const canvas = $('#monitor-noise-canvas');
+      if (!canvas) return null;
+      return { canvas, ctx: canvas.getContext('2d') };
+    }
+    function resizeMonitorNoise() {
+      const mn = getMonitorNoise();
+      if (!mn) return;
+      const rect = mn.canvas.parentElement.getBoundingClientRect();
+      mn.canvas.width = Math.max(1, Math.round(rect.width));
+      mn.canvas.height = Math.max(1, Math.round(rect.height));
+    }
+    window.addEventListener('resize', resizeMonitorNoise);
+
+    function startMonitorNoiseLoop() {
+      stopMonitorNoiseLoop();
+      resizeMonitorNoise();
+      let last = 0;
+      const loop = (t) => {
+        const mn = getMonitorNoise();
+        if (mn && t - last > 110) { drawNoiseFrame(mn.canvas, mn.ctx); last = t; }
+        monitorNoiseRAF = requestAnimationFrame(loop);
+      };
+      monitorNoiseRAF = requestAnimationFrame(loop);
+    }
+    function stopMonitorNoiseLoop() { if (monitorNoiseRAF) cancelAnimationFrame(monitorNoiseRAF); }
+
+    function shake(target = body) {
+      if (!target) return;
+      target.classList.remove('shake');
+      void target.offsetWidth; // força reflow para reiniciar animação
+      target.classList.add('shake');
+      setTimeout(() => target.classList.remove('shake'), 420);
     }
 
-    function glitchPulse() {
-      body.classList.remove('glitching');
-      void body.offsetWidth;
-      body.classList.add('glitching');
-      setTimeout(() => body.classList.remove('glitching'), 520);
+    function glitchPulse(target = body) {
+      if (!target) return;
+      target.classList.remove('glitching');
+      void target.offsetWidth;
+      target.classList.add('glitching');
+      setTimeout(() => target.classList.remove('glitching'), 520);
     }
 
     function whiteFlash(duration = 250) {
@@ -252,9 +284,12 @@
       setTimeout(() => flash.classList.remove('blackout'), durationMs);
     }
 
+    // O dano visual (trincas, ruído forte, glitch) fica só no monitor do PC.
     function setCorruptionLevel(level) {
-      body.classList.remove('corruption-1', 'corruption-2', 'corruption-3');
-      if (level >= 1) body.classList.add(`corruption-${clamp(level, 1, 3)}`);
+      const monitor = $('.monitor-unit');
+      if (!monitor) return;
+      monitor.classList.remove('corruption-1', 'corruption-2', 'corruption-3');
+      if (level >= 1) monitor.classList.add(`corruption-${clamp(level, 1, 3)}`);
     }
 
     function spawnParticles(container, count = 26) {
@@ -270,8 +305,12 @@
       }
     }
 
-    return { startNoiseLoop, stopNoiseLoop, shake, glitchPulse, whiteFlash, blackout, setCorruptionLevel, spawnParticles };
+    return {
+      startNoiseLoop, stopNoiseLoop, startMonitorNoiseLoop, stopMonitorNoiseLoop,
+      shake, glitchPulse, whiteFlash, blackout, setCorruptionLevel, spawnParticles,
+    };
   })();
+
 
   /* ------------------------------------------------------------------
      4. ESTADO GLOBAL
@@ -371,8 +410,8 @@
 
     AudioEngine.error();
     AudioEngine.staticBurst(0.5);
-    FX.shake();
-    FX.glitchPulse();
+    FX.shake($('.monitor-unit'));
+    FX.glitchPulse($('.monitor-unit'));
     setArchitectMessage(ARCHITECT_WARNINGS[randInt(0, ARCHITECT_WARNINGS.length - 1)]);
     renderHUD();
 
@@ -476,28 +515,33 @@
   }
 
   /* ------------------------------------------------------------------
-     9. MOTOR DE FASES — uma pergunta por vez, 5 minutos para responder.
-        A tela mostra só a pergunta atual e o cronômetro; as dicas ficam
-        nos post-its colados ao redor do PC (ver renderPostits).
+     9. MOTOR DE FASES — perguntas em sequência, com um cronômetro único
+        por fase: 1 minuto para cada pergunta que a fase tiver (fase com
+        5 perguntas = 5 minutos no total; o tempo não é resetado entre
+        perguntas). A tela mostra só a pergunta atual e o cronômetro; as
+        dicas ficam no caderninho da mesa (ver renderNotebookHints).
      ------------------------------------------------------------------ */
-  const QUESTION_SECONDS = 5 * 60;
+  const SECONDS_PER_QUESTION = 60;
   let qTimerId = null;
-  let qTimeLeft = QUESTION_SECONDS;
+  let qTimeLeft = 0;
 
   function updateQTimerDisplay() {
-    const el = $('#hud-qtimer');
-    if (!el) return;
-    el.textContent = formatTime(qTimeLeft);
-    el.classList.toggle('time-critical', qTimeLeft <= 30);
+    const text = formatTime(qTimeLeft);
+    const critical = qTimeLeft <= 30;
+    [$('#hud-qtimer'), $('#hud-qtimer-notebook')].forEach((el) => {
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('time-critical', critical);
+    });
   }
 
   function stopQuestionTimer() {
     clearInterval(qTimerId);
   }
 
-  function startQuestionTimer(onExpire) {
+  function startPhaseTimer(totalSeconds, onExpire) {
     stopQuestionTimer();
-    qTimeLeft = QUESTION_SECONDS;
+    qTimeLeft = totalSeconds;
     updateQTimerDisplay();
     qTimerId = setInterval(() => {
       qTimeLeft -= 1;
@@ -511,8 +555,10 @@
 
   /**
    * Renderiza uma sequência de perguntas de múltipla escolha, uma de
-   * cada vez, cada uma com até 5 minutos para ser respondida. Usado por
-   * todas as 5 fases — só muda o conteúdo de `questions` e `options`.
+   * cada vez. O cronômetro é único para a fase inteira (1 min por
+   * pergunta, somado) e continua contando entre uma pergunta e outra.
+   * Usado por todas as fases — só muda o conteúdo de `questions` e
+   * `options`.
    */
   function renderSequentialQuestions(root, { questions, options, onAllDone }) {
     let idx = 0;
@@ -546,21 +592,26 @@
       root.appendChild(card);
     }
 
-    function revealAndAdvance(q) {
+    function timeUpOnCurrentQuestion() {
+      const q = questions[idx];
+      registerMistake();
       $$('.option-btn', root).forEach((b) => {
         b.disabled = true;
         if (b.textContent === q.correct) b.classList.add('correct-flash');
       });
-      setTimeout(() => { idx += 1; showCurrent(); }, 1200);
+      setTimeout(onAllDone, 1200); // acabou o tempo da fase inteira
     }
 
     function handleAnswer(choice, btnEl, q) {
       if (choice === q.correct) {
-        stopQuestionTimer();
         btnEl.classList.add('correct-flash');
         $$('.option-btn', root).forEach((b) => { b.disabled = true; });
         registerSuccess();
-        setTimeout(() => { idx += 1; showCurrent(); }, 650);
+        setTimeout(() => {
+          idx += 1;
+          if (idx >= questions.length) { stopQuestionTimer(); onAllDone(); }
+          else renderCard(questions[idx]);
+        }, 650);
       } else {
         btnEl.classList.add('wrong-flash');
         btnEl.disabled = true;
@@ -568,54 +619,37 @@
       }
     }
 
-    function showCurrent() {
-      if (idx >= questions.length) { stopQuestionTimer(); onAllDone(); return; }
-      const q = questions[idx];
-      renderCard(q);
-      startQuestionTimer(() => {
-        registerMistake();
-        revealAndAdvance(q);
-      });
-    }
-
-    showCurrent();
+    const totalSeconds = questions.length * SECONDS_PER_QUESTION;
+    renderCard(questions[idx]);
+    startPhaseTimer(totalSeconds, timeUpOnCurrentQuestion);
   }
 
   /* ------------------------------------------------------------------
-     9b. POST-ITS DE DICA — colados na cena, um exemplo por categoria.
+     9b. CADERNINHO DE DICAS — abre por cima de tudo, mostra as
+     anotações de quem esteve ali antes (um exemplo por categoria).
      ------------------------------------------------------------------ */
-  const POSTIT_COLORS = ['#f4e07a', '#f7b8c4', '#a8e6cf', '#ffd6a5', '#c9c2f5', '#ffe08a'];
-  const POSTIT_SPOTS = [
-    { top: '4%',  left: '2%',  transform: 'rotate(-6deg)' },
-    { top: '6%',  right: '3%', transform: 'rotate(5deg)' },
-    { top: '42%', left: '1%',  transform: 'rotate(-4deg)' },
-    { top: '44%', right: '1%', transform: 'rotate(4deg)' },
-    { bottom: '10%', left: '4%',  transform: 'rotate(-3deg)' },
-    { bottom: '12%', right: '3%', transform: 'rotate(6deg)' },
-  ];
-
-  function renderPostits(hints) {
-    const layer = $('#postit-layer');
-    if (!layer) return;
-    layer.innerHTML = '';
-    hints.forEach((hint, i) => {
-      const spot = POSTIT_SPOTS[i % POSTIT_SPOTS.length];
-      const note = document.createElement('div');
-      note.className = 'postit';
-      note.style.setProperty('--postit-color', POSTIT_COLORS[i % POSTIT_COLORS.length]);
-      Object.entries(spot).forEach(([prop, val]) => { note.style[prop] = val; });
-
-      const label = document.createElement('span');
-      label.className = 'postit-label';
+  function renderNotebookHints(hints) {
+    const wrap = $('#notebook-hints');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    hints.forEach((hint) => {
+      const row = document.createElement('div');
+      row.className = 'notebook-hint';
+      const label = document.createElement('strong');
       label.textContent = hint.label;
       const example = document.createElement('span');
       example.textContent = hint.example;
-
-      note.appendChild(label);
-      note.appendChild(example);
-      note.addEventListener('click', () => AudioEngine.click());
-      layer.appendChild(note);
+      row.appendChild(label);
+      row.appendChild(example);
+      wrap.appendChild(row);
     });
+  }
+
+  function toggleNotebook(open) {
+    const overlay = $('#notebook-overlay');
+    if (!overlay) return;
+    overlay.hidden = !open;
+    AudioEngine.click();
   }
 
   function unlockDoc(docName) {
@@ -642,7 +676,8 @@
     const root = $('#phase-root');
     root.innerHTML = '';
 
-    renderPostits(phase.hints || []);
+    toggleNotebook(false);
+    renderNotebookHints(phase.hints || []);
     setArchitectMessage(phase.introMessage);
     renderHUD();
 
@@ -661,117 +696,113 @@
      10. DEFINIÇÃO DAS 5 FASES
      ------------------------------------------------------------------ */
   const PHASES = [
-    // ---------------- FASE 1 — Sala do Cliente ----------------
+    // ---------------- FASE 1 — Sala do Cliente (fácil) ----------------
     {
       slug: 'sala_cliente',
       title: 'Sala do Cliente',
-      introMessage: 'Comece revirando o que restou da sala do cliente. Isso É ou NÃO É um requisito funcional?',
-      docName: 'Requisitos Funcionais',
-      doneMessage: 'A porta destrancou. Você aprendeu a separar fato de opinião.',
-      options: ['É requisito funcional', 'Não é requisito funcional'],
+      introMessage: 'Comece pelo básico: isso é uma AÇÃO que o sistema faz, ou uma QUALIDADE de como ele funciona?',
+      docName: 'Requisitos — Nível 1',
+      doneMessage: 'A porta destrancou. Você aprendeu a diferença mais básica.',
+      options: ['Requisito Funcional', 'Requisito Não Funcional'],
       questions: shuffle([
-        { text: 'O sistema deve permitir ao cliente acompanhar o status do pedido em tempo real.', correct: 'É requisito funcional' },
-        { text: 'O sistema deve permitir cancelar um pedido em até 10 minutos após a compra.', correct: 'É requisito funcional' },
-        { text: 'O sistema deve emitir nota fiscal automaticamente após a confirmação do pagamento.', correct: 'É requisito funcional' },
-        { text: 'A cor da interface deve ser verde porque combina com a marca.', correct: 'Não é requisito funcional' },
-        { text: 'O prazo do projeto é curto e a equipe está sob pressão.', correct: 'Não é requisito funcional' },
-      ]),
-      hints: [
-        { label: 'É requisito funcional', example: '"O sistema deve emitir nota fiscal automaticamente após o pagamento."' },
-        { label: 'Não é requisito', example: '"Eu acho que verde combina mais com a marca." — isso é opinião.' },
-      ],
-    },
-
-    // ---------------- FASE 2 — Sala das Mentiras ----------------
-    {
-      slug: 'sala_mentiras',
-      title: 'Sala das Mentiras',
-      introMessage: 'Cuidado: nesta sala, cada frase tenta te enganar.',
-      docName: 'Requisitos Não Funcionais',
-      doneMessage: 'O cofre abriu. Nem tudo que o cliente diz é requisito — e isso é ouro.',
-      options: ['Requisito Funcional', 'Requisito Não Funcional', 'Opinião', 'Desejo do Cliente', 'Irrelevante'],
-      questions: shuffle([
-        { text: 'O sistema deve suportar 5.000 usuários simultâneos sem queda de desempenho.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o cliente acompanhe o status do pedido em tempo real.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve responder a qualquer ação do usuário em menos de 2 segundos.', correct: 'Requisito Não Funcional' },
         { text: 'O sistema deve permitir cadastrar um novo produto com nome, preço e estoque.', correct: 'Requisito Funcional' },
-        { text: 'Eu acho que o sistema deveria ser mais bonito.', correct: 'Opinião' },
-        { text: 'Seria incrível se o sistema também lavasse a louça.', correct: 'Desejo do Cliente' },
-        { text: 'O escritório do cliente fica no terceiro andar.', correct: 'Irrelevante' },
-        { text: 'O sistema deve responder a qualquer requisição em menos de 2 segundos.', correct: 'Requisito Não Funcional' },
-        { text: 'O sistema deve permitir emitir relatório mensal de vendas em PDF.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve suportar 1.000 usuários simultâneos sem travar.', correct: 'Requisito Não Funcional' },
       ]),
       hints: [
-        { label: 'Requisito Funcional', example: '"Cadastrar um novo produto com nome, preço e estoque."' },
-        { label: 'Requisito Não Funcional', example: '"Suportar 5.000 usuários simultâneos sem queda de desempenho."' },
-        { label: 'Opinião', example: '"Eu acho que o sistema deveria ser mais bonito."' },
-        { label: 'Desejo do Cliente', example: '"Seria incrível se o sistema também lavasse a louça."' },
-        { label: 'Irrelevante', example: '"O escritório do cliente fica no terceiro andar."' },
+        { label: 'Requisito Funcional', example: '"O sistema deve permitir cadastrar um produto." — é uma AÇÃO que o sistema executa.' },
+        { label: 'Requisito Não Funcional', example: '"O sistema deve suportar 1.000 usuários simultâneos." — é uma QUALIDADE (desempenho), não uma ação.' },
       ],
     },
 
-    // ---------------- FASE 3 — Casos de Uso ----------------
+    // ---------------- FASE 2 — Sala das Dúvidas ----------------
     {
-      slug: 'casos_uso',
-      title: 'Casos de Uso',
-      introMessage: 'Monte o diagrama. Qual ator faz esta ação?',
-      docName: 'Casos de Uso',
-      doneMessage: 'Você recebeu uma chave. O sistema começa a fazer sentido.',
-      options: ['CLIENTE', 'USUÁRIO', 'ADMINISTRADOR', 'GERENTE'],
+      slug: 'sala_duvidas',
+      title: 'Sala das Dúvidas',
+      introMessage: 'Mais frases, o mesmo raciocínio: função do sistema ou qualidade do sistema?',
+      docName: 'Requisitos — Nível 2',
+      doneMessage: 'O cofre abriu. Você já não hesita mais tanto.',
+      options: ['Requisito Funcional', 'Requisito Não Funcional'],
       questions: shuffle([
-        { text: 'Comprar produto', correct: 'CLIENTE' },
-        { text: 'Cadastrar conta', correct: 'USUÁRIO' },
-        { text: 'Excluir registro do sistema', correct: 'ADMINISTRADOR' },
-        { text: 'Emitir relatório de vendas', correct: 'GERENTE' },
+        { text: 'O sistema deve emitir nota fiscal automaticamente após a confirmação do pagamento.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve estar disponível 99,9% do tempo, incluindo feriados.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o cliente cancele um pedido em até 10 minutos após a compra.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve criptografar os dados de cartão de crédito armazenados.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve gerar um relatório mensal de vendas em PDF.', correct: 'Requisito Funcional' },
       ]),
       hints: [
-        { label: 'Cliente', example: 'Ex.: buscar um produto no catálogo.' },
-        { label: 'Usuário', example: 'Ex.: alterar a própria senha.' },
-        { label: 'Administrador', example: 'Ex.: remover um usuário do sistema.' },
-        { label: 'Gerente', example: 'Ex.: consultar relatório de vendas.' },
+        { label: 'Requisito Funcional', example: '"Emitir nota fiscal automaticamente." — o sistema FAZ algo.' },
+        { label: 'Requisito Não Funcional', example: '"Estar disponível 99,9% do tempo." — descreve um atributo de qualidade (confiabilidade).' },
       ],
     },
 
-    // ---------------- FASE 4 — Banco de Dados ----------------
+    // ---------------- FASE 3 — Sala das Armadilhas ----------------
     {
-      slug: 'banco_dados',
-      title: 'Banco de Dados',
-      introMessage: 'O banco está incompleto. A qual entidade este elemento pertence?',
-      docName: 'Modelo Entidade-Relacionamento',
-      doneMessage: 'O modelo de dados está consistente. Poucos chegam até aqui.',
-      options: ['CLIENTE', 'PEDIDO', 'PRODUTO'],
+      slug: 'sala_armadilhas',
+      title: 'Sala das Armadilhas',
+      introMessage: 'Cuidado, essas frases foram escritas para confundir. Leia com calma.',
+      docName: 'Requisitos — Nível 3',
+      doneMessage: 'Você não caiu na armadilha. Poucos chegam até aqui sem errar.',
+      options: ['Requisito Funcional', 'Requisito Não Funcional'],
       questions: shuffle([
-        { text: 'PK: id_cliente', correct: 'CLIENTE' },
-        { text: 'FK: id_cliente (quem fez o pedido)', correct: 'PEDIDO' },
-        { text: 'PK: id_pedido', correct: 'PEDIDO' },
-        { text: 'PK: id_produto', correct: 'PRODUTO' },
-        { text: 'Cardinalidade 1:N — Cliente faz Pedido', correct: 'CLIENTE' },
-        { text: 'Cardinalidade N:N — Pedido contém Produto', correct: 'PRODUTO' },
+        { text: 'O sistema deve rejeitar senhas com menos de 8 caracteres no momento do cadastro.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve carregar a lista de produtos em até 3 segundos, mesmo com 10 mil itens cadastrados.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o administrador exporte todos os pedidos em CSV.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve ser compatível com os navegadores Chrome, Firefox e Edge.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve enviar um e-mail de confirmação após o cadastro do usuário.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve continuar funcionando mesmo com uma conexão de internet instável, reenviando dados perdidos automaticamente.', correct: 'Requisito Não Funcional' },
       ]),
       hints: [
-        { label: 'PK (chave primária)', example: 'id_cliente identifica um cliente de forma única.' },
-        { label: 'FK (chave estrangeira)', example: 'id_cliente dentro de Pedido aponta para quem comprou.' },
-        { label: 'Cardinalidade', example: '1:N — um Cliente pode fazer vários Pedidos.' },
+        { label: 'Requisito Funcional', example: '"Rejeitar senhas com menos de 8 caracteres." — é uma regra que o sistema EXECUTA no cadastro.' },
+        { label: 'Requisito Não Funcional', example: '"Ser compatível com Chrome, Firefox e Edge." — é sobre COMO o sistema roda, não sobre o que ele faz.' },
       ],
     },
 
-    // ---------------- FASE 5 — Mudança de Escopo ----------------
+    // ---------------- FASE 4 — Sala da Ambiguidade ----------------
     {
-      slug: 'mudanca_escopo',
-      title: 'Mudança de Escopo',
-      introMessage: 'O cliente mudou de ideia de novo. Isso também é engenharia de requisitos.',
-      docName: 'Fluxo do Sistema Atualizado',
-      doneMessage: 'Sistema reconstruído. Requisitos mudam — projetos maduros absorvem isso.',
-      options: ['Requisito Novo', 'Alteração de Requisito Existente', 'Requisito Não Funcional'],
+      slug: 'sala_ambiguidade',
+      title: 'Sala da Ambiguidade',
+      introMessage: 'Aqui quase tudo parece as duas coisas ao mesmo tempo. Foque no verbo principal da frase.',
+      docName: 'Requisitos — Nível 4',
+      doneMessage: 'O modelo está consistente. Você já pensa como engenheiro de requisitos.',
+      options: ['Requisito Funcional', 'Requisito Não Funcional'],
       questions: shuffle([
-        { text: 'Agora o sistema também precisa aceitar pagamento via PIX.', correct: 'Requisito Novo' },
-        { text: 'O cancelamento de pedido, que era em 10 minutos, agora deve ser em até 30 minutos.', correct: 'Alteração de Requisito Existente' },
-        { text: 'O sistema precisa funcionar offline e sincronizar depois.', correct: 'Requisito Não Funcional' },
-        { text: 'Agora precisa existir login com conta Google.', correct: 'Requisito Novo' },
-        { text: 'O relatório de vendas, que era mensal, agora deve poder ser gerado semanalmente.', correct: 'Alteração de Requisito Existente' },
+        { text: 'O sistema deve bloquear a conta após 3 tentativas de senha incorreta.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve garantir que nenhuma senha seja armazenada em texto puro.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o cliente avalie o produto com uma nota de 1 a 5.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve escalar automaticamente os servidores em picos de acesso, como Black Friday.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir agendar o envio de um pedido para uma data futura.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve ser fácil de usar mesmo por pessoas sem experiência com tecnologia.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve calcular automaticamente o frete com base no CEP informado.', correct: 'Requisito Funcional' },
       ]),
       hints: [
-        { label: 'Requisito Novo', example: '"Agora precisa existir login com conta Google."' },
-        { label: 'Alteração de Requisito', example: '"O prazo, que era 10 min, passou para 30 min."' },
-        { label: 'Requisito Não Funcional', example: '"O sistema precisa funcionar offline e sincronizar depois."' },
+        { label: 'Requisito Funcional', example: '"Calcular o frete com base no CEP." — uma tarefa concreta, com entrada e saída.' },
+        { label: 'Requisito Não Funcional', example: '"Ser fácil de usar." — uma característica desejada, sem uma ação específica.' },
+      ],
+    },
+
+    // ---------------- FASE 5 — Sala Final: Auditoria ----------------
+    {
+      slug: 'sala_auditoria',
+      title: 'Sala Final — Auditoria',
+      introMessage: 'Última sala. As frases são quase gêmeas — a diferença está em um detalhe só.',
+      docName: 'Requisitos — Nível 5 (Documento Final)',
+      doneMessage: 'Sistema reconstruído. Você separou função de qualidade até no limite.',
+      options: ['Requisito Funcional', 'Requisito Não Funcional'],
+      questions: shuffle([
+        { text: 'O sistema deve permitir a recuperação de senha por e-mail, limitada a 3 tentativas por hora.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve processar cada solicitação de recuperação de senha em menos de 5 segundos.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o gerente aprove ou recuse um pedido de reembolso.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve manter 100% de disponibilidade durante o horário comercial.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve registrar a data e a hora de cada aprovação de reembolso.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve suportar picos de até 20 mil acessos simultâneos durante promoções.', correct: 'Requisito Não Funcional' },
+        { text: 'O sistema deve permitir que o cliente baixe a nota fiscal em PDF a qualquer momento.', correct: 'Requisito Funcional' },
+        { text: 'O sistema deve continuar funcionando mesmo se um dos servidores falhar.', correct: 'Requisito Não Funcional' },
+      ]),
+      hints: [
+        { label: 'Requisito Funcional', example: '"Registrar a data e hora de cada aprovação." — uma ação concreta que fica salva.' },
+        { label: 'Requisito Não Funcional', example: '"Processar em menos de 5 segundos." — o mesmo processo, mas medindo desempenho, não a ação em si.' },
       ],
     },
   ];
@@ -785,6 +816,8 @@
     resetState(State.pendingDifficulty || DEFAULT_DIFFICULTY);
     showScreen('screen-game');
     renderHUD();
+    FX.setCorruptionLevel(0);
+    FX.startMonitorNoiseLoop();
     renderCurrentPhase();
     State.running = true;
     startTimer();
@@ -793,7 +826,9 @@
 
   function stopGameLoops() {
     stopTimer();
+    stopQuestionTimer();
     AudioEngine.stopAmbient();
+    FX.stopMonitorNoiseLoop();
     State.running = false;
   }
 
@@ -1086,6 +1121,12 @@
     $('#btn-skip-intro').addEventListener('click', (e) => {
       e.stopPropagation();
       skipIntro();
+    });
+
+    $('#notebook-btn').addEventListener('click', () => toggleNotebook(true));
+    $('#notebook-close-btn').addEventListener('click', () => toggleNotebook(false));
+    $('#notebook-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'notebook-overlay') toggleNotebook(false);
     });
 
     $$('.difficulty-option').forEach((btn) => {

@@ -93,7 +93,7 @@
       <ul>
         <li><strong>Dificuldade</strong> — antes de começar, escolha entre Fácil, Médio ou Difícil. Isso muda o tempo total e a tolerância a erros.</li>
         <li><strong>5 fases</strong> — cada uma revela um artefato: Requisitos Funcionais, Requisitos Não Funcionais, Casos de Uso, Modelo Entidade-Relacionamento e Fluxo do Sistema.</li>
-        <li><strong>Cronômetro</strong> — você tem 60 minutos. Quando zera, o projeto é cancelado.</li>
+        <li><strong>Cronômetro</strong> — você tem alguns minutos. Quando zera, o projeto é cancelado.</li>
         <li><strong>Integridade do Projeto</strong> — cada erro consome um segmento. Zerar a barra encerra o jogo.</li>
         <li>Observe pistas com atenção: emails, post-its, áudios e entrevistas escondem os verdadeiros requisitos.</li>
       </ul>
@@ -145,17 +145,17 @@
     <div class="difficulty-list" id="difficulty-list">
       <button class="difficulty-option" data-difficulty="facil">
         <span class="difficulty-name">FÁCIL <span class="difficulty-tag">estagiário</span></span>
-        <span class="difficulty-meta">75 min · 12 vidas </span>
+        <span class="difficulty-meta">12 segmentos de integridade</span>
         <span class="difficulty-desc">Mais tempo, mais margem de erro. Bom para aprender a mecânica sem pressa.</span>
       </button>
       <button class="difficulty-option" data-difficulty="medio">
         <span class="difficulty-name">MÉDIO <span class="difficulty-tag">analista</span></span>
-        <span class="difficulty-meta">60 min · 10 vidas </span>
+        <span class="difficulty-meta">10 segmentos de integridade</span>
         <span class="difficulty-desc">A experiência original do Arquiteto. Equilíbrio entre tempo e punição.</span>
       </button>
       <button class="difficulty-option" data-difficulty="dificil">
         <span class="difficulty-name">DIFÍCIL <span class="difficulty-tag">arquiteto de sistemas</span></span>
-        <span class="difficulty-meta">45 min · 7 vidas </span>
+        <span class="difficulty-meta">7 segmentos de integridade</span>
         <span class="difficulty-desc">Pouco tempo, quase nenhuma margem. A sala racha rápido e cedo.</span>
       </button>
     </div>
@@ -205,8 +205,7 @@
     </div>
     <div class="room-floor" aria-hidden="true"></div>
 
-    <!-- Post-its colados na parede/monitor com as dicas de cada fase -->
-    <div class="postit-layer" id="postit-layer"></div>
+    <!-- Post-its removidos: as dicas agora ficam no caderninho da mesa -->
 
     <div class="desk-unit">
       <div class="monitor-unit">
@@ -217,16 +216,54 @@
           </div>
           <div class="monitor-screen">
             <main id="phase-root"></main>
+            <div class="monitor-fx" aria-hidden="true">
+              <div class="m-scanlines"></div>
+              <div class="m-vignette"></div>
+              <canvas class="monitor-noise-canvas" id="monitor-noise-canvas"></canvas>
+              <div class="m-chromatic"></div>
+              <div class="m-cracks">
+                <svg viewBox="0 0 400 300" preserveAspectRatio="none">
+                  <path class="m-crack-path m-crack-a" d="M46,0 L118,88 L84,132 L142,210 L96,300"/>
+                  <path class="m-crack-path m-crack-a" d="M118,88 L180,70 L210,20"/>
+                  <path class="m-crack-path m-crack-b" d="M400,36 L308,118 L346,168 L262,222 L300,300"/>
+                  <path class="m-crack-path m-crack-c" d="M0,168 L96,190 L54,260 L110,300"/>
+                </svg>
+              </div>
+            </div>
           </div>
           <div class="monitor-brand">TERMINAL&#8209;9</div>
         </div>
         <div class="monitor-stand" aria-hidden="true"></div>
       </div>
-      <div class="desk-keyboard" aria-hidden="true">
-        <div class="pc-key" style="width:30%"></div>
-        <div class="pc-key" style="width:45%"></div>
-        <div class="pc-key" style="width:20%"></div>
+
+      <!-- Mesa de madeira: o PC e os objetos apoiam aqui, ninguém flutua -->
+      <div class="desk-plank" aria-hidden="false">
+        <div class="prop-mug" aria-hidden="true"></div>
+        <div class="prop-papers" aria-hidden="true"></div>
+        <div class="prop-papers-alt" aria-hidden="true"></div>
+        <div class="prop-pencil" aria-hidden="true"></div>
+        <button class="notebook" id="notebook-btn" aria-label="Abrir caderno de anotações">
+          <span class="notebook-spiral"></span>
+          <span class="notebook-label">?</span>
+        </button>
+        <div class="desk-keyboard" aria-hidden="true">
+          <div class="pc-key" style="width:30%"></div>
+          <div class="pc-key" style="width:45%"></div>
+          <div class="pc-key" style="width:20%"></div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Caderninho aberto: dicas de quem esteve aqui antes -->
+  <div class="notebook-overlay" id="notebook-overlay" hidden>
+    <div class="notebook-page">
+      <div class="notebook-page-header">
+        <span class="notebook-title">Anotações de quem esteve aqui antes</span>
+        <span class="notebook-timer" id="hud-qtimer-notebook">05:00</span>
+        <button class="notebook-close" id="notebook-close-btn" aria-label="Fechar caderno">✕</button>
+      </div>
+      <div class="notebook-hints" id="notebook-hints"></div>
     </div>
   </div>
 
