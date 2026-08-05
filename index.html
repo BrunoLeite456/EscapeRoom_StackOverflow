@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TERMINAL-9 — Preso com O Arquiteto</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     OVERLAY: GIRE O CELULAR (só aparece em telas de toque em pé)
+     ============================================================ -->
+<div id="rotate-overlay" aria-hidden="true">
+  <div class="rotate-icon">📱</div>
+  <p class="rotate-text">Deite o celular.<br>O terminal só liga na horizontal.</p>
+</div>
+
+<!-- ============================================================
+     OVERLAYS GLOBAIS DE EFEITO (CRT, ruído, glitch, vinheta)
+     Ficam sempre por cima de tudo, controlados via classes JS
+     ============================================================ -->
+<div id="crt-overlay" aria-hidden="true">
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+  <canvas id="noise-canvas"></canvas>
+  <div class="chromatic-flash"></div>
+  <div class="screen-cracks">
+    <svg class="crack-svg" viewBox="0 0 400 300" preserveAspectRatio="none">
+      <path class="crack-path crack-a" d="M46,0 L118,88 L84,132 L142,210 L96,300"/>
+      <path class="crack-path crack-a" d="M118,88 L180,70 L210,20"/>
+      <path class="crack-path crack-b" d="M400,36 L308,118 L346,168 L262,222 L300,300"/>
+      <path class="crack-path crack-b" d="M308,118 L360,150"/>
+      <path class="crack-path crack-c" d="M0,168 L96,190 L54,260 L110,300"/>
+      <path class="crack-path crack-c" d="M400,260 L330,280 L360,300"/>
+    </svg>
+  </div>
+  <div class="dust-layer"></div>
+</div>
+<div id="fog-layer" aria-hidden="true"></div>
+<div id="screen-flash" aria-hidden="true"></div>
+
+<!-- ============================================================
+     TELA: BOOT / CARREGAMENTO
+     ============================================================ -->
+<section id="screen-boot" class="screen active">
+  <div class="boot-text">
+    <p>&gt; INICIALIZANDO NÚCLEO DO ARQUITETO<span class="cursor">_</span></p>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: MENU PRINCIPAL
+     ============================================================ -->
+<section id="screen-menu" class="screen">
+  <div class="particles" id="menu-particles"></div>
+  <div class="menu-content">
+    <h1 class="game-title">
+      <span class="title-glitch" data-text="O ARQUITETO">O ARQUITETO</span>
+    </h1>
+    <p class="game-subtitle">um escape room de engenharia de requisitos</p>
+
+    <nav class="menu-nav">
+      <button class="menu-btn" id="btn-play" data-sound="click">
+        <span class="menu-btn-index">01</span> JOGAR
+      </button>
+      <button class="menu-btn" id="btn-instructions" data-sound="click">
+        <span class="menu-btn-index">02</span> INSTRUÇÕES
+      </button>
+      <button class="menu-btn" id="btn-credits" data-sound="click">
+        <span class="menu-btn-index">03</span> CRÉDITOS
+      </button>
+      <button class="menu-btn" id="btn-ranking" data-sound="click">
+        <span class="menu-btn-index">04</span> RANKING
+      </button>
+      <button class="menu-btn" id="btn-exit" data-sound="click">
+        <span class="menu-btn-index">05</span> SAIR
+      </button>
+    </nav>
+
+    <p class="menu-footer">sistema em espera — aguardando um sobrevivente</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: INSTRUÇÕES
+     ============================================================ -->
+<section id="screen-instructions" class="screen">
+  <div class="panel-card">
+    <h2 class="panel-title">// INSTRUÇÕES</h2>
+    <div class="panel-body">
+      <p>Você está preso em uma instalação controlada por uma inteligência chamada <strong>O Arquiteto</strong>. Para sair, precisa reconstruir a documentação de um sistema que fracassou por má Engenharia de Requisitos.</p>
+      <ul>
+        <li><strong>Dificuldade</strong> — antes de começar, escolha entre Fácil, Médio ou Difícil. Isso muda o tempo total e a tolerância a erros.</li>
+        <li><strong>5 fases</strong> — cada uma revela um artefato: Requisitos Funcionais, Requisitos Não Funcionais, Casos de Uso, Modelo Entidade-Relacionamento e Fluxo do Sistema.</li>
+        <li><strong>Cronômetro</strong> — você tem 60 minutos. Quando zera, o projeto é cancelado.</li>
+        <li><strong>Integridade do Projeto</strong> — cada erro consome um segmento. Zerar a barra encerra o jogo.</li>
+        <li>Observe pistas com atenção: emails, post-its, áudios e entrevistas escondem os verdadeiros requisitos.</li>
+      </ul>
+      <p class="panel-warning">O Arquiteto não pune por raiva. Ele pune para ensinar.</p>
+    </div>
+    <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: CRÉDITOS
+     ============================================================ -->
+<section id="screen-credits" class="screen">
+  <div class="panel-card">
+    <h2 class="panel-title">// CRÉDITOS</h2>
+    <div class="panel-body">
+      <p>Projeto acadêmico de Engenharia de Requisitos.</p>
+      <p>Design, narrativa e código: <strong>Equipe do Projeto</strong>.</p>
+      <p>Personagem original: <strong>O Arquiteto</strong> — uma inteligência que constrói e destrói sistemas mal especificados.</p>
+      <p>Desenvolvido inteiramente em HTML5, CSS3 e JavaScript puro, sem frameworks ou bibliotecas externas.</p>
+    </div>
+    <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: RANKING
+     ============================================================ -->
+<section id="screen-ranking" class="screen">
+  <div class="panel-card">
+    <h2 class="panel-title">// SOBREVIVENTES</h2>
+    <div class="panel-body">
+      <ol id="ranking-list" class="ranking-list">
+        <li class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</li>
+      </ol>
+    </div>
+    <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: SELEÇÃO DE DIFICULDADE
+     ============================================================ -->
+<section id="screen-difficulty" class="screen">
+  <div class="panel-card difficulty-card">
+    <h2 class="panel-title">// SELECIONE O NÍVEL</h2>
+    <p class="panel-body difficulty-intro">O Arquiteto ajusta a máquina conforme sua confiança. Quanto menos tempo e tolerância, mais rápido a sala racha.</p>
+
+    <div class="difficulty-list" id="difficulty-list">
+      <button class="difficulty-option" data-difficulty="facil">
+        <span class="difficulty-name">FÁCIL <span class="difficulty-tag">estagiário</span></span>
+        <span class="difficulty-meta">75 min · 12 vidas </span>
+        <span class="difficulty-desc">Mais tempo, mais margem de erro. Bom para aprender a mecânica sem pressa.</span>
+      </button>
+      <button class="difficulty-option" data-difficulty="medio">
+        <span class="difficulty-name">MÉDIO <span class="difficulty-tag">analista</span></span>
+        <span class="difficulty-meta">60 min · 10 vidas </span>
+        <span class="difficulty-desc">A experiência original do Arquiteto. Equilíbrio entre tempo e punição.</span>
+      </button>
+      <button class="difficulty-option" data-difficulty="dificil">
+        <span class="difficulty-name">DIFÍCIL <span class="difficulty-tag">arquiteto de sistemas</span></span>
+        <span class="difficulty-meta">45 min · 7 vidas </span>
+        <span class="difficulty-desc">Pouco tempo, quase nenhuma margem. A sala racha rápido e cedo.</span>
+      </button>
+    </div>
+
+    <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: INTRO NARRATIVA (TV antiga)
+     ============================================================ -->
+<section id="screen-intro" class="screen">
+  <div class="intro-room">
+    <div class="room-dust" aria-hidden="true"></div>
+    <div class="old-tv">
+      <div class="pc-led" id="pc-led"></div>
+      <div class="tv-frame">
+        <div class="tv-screen">
+          <div class="tv-static"></div>
+          <div class="pc-crack-mini"></div>
+          <p id="intro-line" class="tv-line"></p>
+          <span class="tv-cursor">█</span>
+        </div>
+        <div class="pc-brand">TERMINAL&#8209;9 &nbsp;·&nbsp; MEM 64K &nbsp;·&nbsp; SEM SINAL</div>
+      </div>
+      <div class="tv-legs"></div>
+      <div class="pc-keyboard" aria-hidden="true">
+        <div class="pc-key" style="width:60%"></div>
+        <div class="pc-key" style="width:80%"></div>
+        <div class="pc-key" style="width:40%"></div>
+      </div>
+    </div>
+    <p class="intro-skip">a sala está vazia. só existe este computador. clique para continuar</p>
+    <button class="menu-btn skip-intro-btn" id="btn-skip-intro">PULAR ▸▸</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     JOGO — HUD + FASES
+     ============================================================ -->
+<section id="screen-game" class="screen">
+
+  <!-- Cena: o quarto ao fundo, o PC quebrado em primeiro plano -->
+  <div class="room-scene">
+    <div class="room-wall" aria-hidden="true">
+      <div class="room-window"></div>
+    </div>
+    <div class="room-floor" aria-hidden="true"></div>
+
+    <!-- Post-its colados na parede/monitor com as dicas de cada fase -->
+    <div class="postit-layer" id="postit-layer"></div>
+
+    <div class="desk-unit">
+      <div class="monitor-unit">
+        <div class="monitor-bezel">
+          <div class="monitor-topbar">
+            <span class="monitor-led-strip" id="integrity-leds" title="Integridade do sistema"></span>
+            <span class="qtimer" id="hud-qtimer">05:00</span>
+          </div>
+          <div class="monitor-screen">
+            <main id="phase-root"></main>
+          </div>
+          <div class="monitor-brand">TERMINAL&#8209;9</div>
+        </div>
+        <div class="monitor-stand" aria-hidden="true"></div>
+      </div>
+      <div class="desk-keyboard" aria-hidden="true">
+        <div class="pc-key" style="width:30%"></div>
+        <div class="pc-key" style="width:45%"></div>
+        <div class="pc-key" style="width:20%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rodapé de mensagens do Arquiteto -->
+  <footer id="architect-log">
+    <span class="architect-tag">O ARQUITETO:</span>
+    <span id="architect-message">Comece revirando o que restou da sala do cliente.</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     TELA: GAME OVER
+     ============================================================ -->
+<section id="screen-gameover" class="screen">
+  <div class="gameover-content">
+    <h2 class="gameover-title" id="gameover-title">PROJETO CANCELADO</h2>
+    <div class="gameover-typed" id="gameover-typed"></div>
+    <div class="victims-block" id="victims-block" hidden>
+      <p class="victims-label">USUÁRIOS AINDA CONECTADOS AO TERMINAL&#8209;9:</p>
+      <ul class="victims-list" id="victims-list"></ul>
+    </div>
+    <p class="gameover-final" id="gameover-final"></p>
+    <button class="menu-btn" id="btn-restart" hidden>↺ TENTAR NOVAMENTE</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: VITÓRIA
+     ============================================================ -->
+<section id="screen-victory" class="screen">
+  <div class="victory-content">
+    <h2 class="victory-title" id="victory-title">PARABÉNS</h2>
+    <div class="victory-typed" id="victory-typed"></div>
+    <div class="victory-reveal" id="victory-reveal" hidden>
+      <p class="victory-sub" id="victory-sub">Você concluiu o Escape Room de Engenharia de Requisitos.</p>
+      <div class="victory-stats">
+        <div class="stat-row"><span>Tempo restante</span><strong id="v-time"></strong></div>
+        <div class="stat-row"><span>Erros cometidos</span><strong id="v-errors"></strong></div>
+        <div class="stat-row"><span>Integridade restante</span><strong id="v-integrity"></strong></div>
+        <div class="stat-row"><span>Precisão</span><strong id="v-precision"></strong></div>
+        <div class="stat-row stat-final"><span>Nota final</span><strong id="v-score"></strong></div>
+      </div>
+      <p class="victory-eerie" id="victory-eerie"></p>
+      <input type="text" id="v-name" maxlength="16" placeholder="SEU NOME PARA O RANKING">
+      <div class="victory-actions">
+        <button class="menu-btn" id="btn-save-score">SALVAR PONTUAÇÃO</button>
+        <button class="menu-btn" id="btn-play-again">JOGAR NOVAMENTE</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="script.js"></script>
+</body>
+</html>
