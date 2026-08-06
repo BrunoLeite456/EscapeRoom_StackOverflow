@@ -365,7 +365,7 @@
     });
     const target = $(`#${id}`);
     target.classList.add('active', 'fade-in');
-    updateSessionBadge();
+    updateTerminalOperatorLabel();
   }
 
   /* ------------------------------------------------------------------
@@ -961,16 +961,13 @@
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   }
 
-  function updateSessionBadge() {
-    const badge = $('#session-badge');
+  function updateTerminalOperatorLabel() {
+    const brand = $('#monitor-brand');
+    if (!brand) return;
     const session = loadSession();
-    if (!badge) return;
-    if (session && session.nickname) {
-      $('#session-badge-name').textContent = session.nickname;
-      badge.hidden = false;
-    } else {
-      badge.hidden = true;
-    }
+    brand.textContent = session && session.nickname
+      ? `TERMINAL\u20119 — OPERADOR: ${session.nickname.toUpperCase()}`
+      : 'TERMINAL\u20119';
   }
 
   function resetLoginForm() {
@@ -981,7 +978,7 @@
 
   function logout() {
     clearSession();
-    updateSessionBadge();
+    updateTerminalOperatorLabel();
     resetLoginForm();
     showScreen('screen-login');
   }
@@ -1406,12 +1403,9 @@
 
       errEl.hidden = true;
       saveSession({ nickname, loginAt: new Date().toISOString() });
-      updateSessionBadge();
+      updateTerminalOperatorLabel();
       showScreen('screen-menu');
     });
-
-    // -- Badge de sessão / logout (RF02 / RF08) --
-    $('#session-badge-logout').addEventListener('click', logout);
 
     // -- Ranking: filtro/pesquisa (RF07) --
     $('#ranking-search').addEventListener('input', renderRankingTable);
