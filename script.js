@@ -824,7 +824,15 @@
   // -------------------------------------------------------------------
   const JSONBIN_BIN_ID = '6a750f93f5f4af5e29f4f49a';
   const JSONBIN_ACCESS_KEY = '$2a$10$XUGY9XbamlOm141sEfO5re.57SsC85kRU4pHGOhsX8U5u8ZQnNq0e';
-  const JSONBIN_CONFIGURED = JSONBIN_BIN_ID !== '6a750f93f5f4af5e29f4f49a' && JSONBIN_ACCESS_KEY !== '$2a$10$XUGY9XbamlOm141sEfO5re.57SsC85kRU4pHGOhsX8U5u8ZQnNq0e';
+  // Considera configurado sempre que as duas chaves acima existirem e não
+  // parecerem texto de placeholder — não compara com uma cópia fixa do
+  // valor (isso já causou bug: ao colar a chave real por cima do
+  // placeholder, a comparação virava "valor === o próprio valor" e nunca
+  // batia como "configurado").
+  function looksLikePlaceholder(value) {
+    return !value || /seu_bin_id|sua_access_key|placeholder|cole_aqui|xxxx/i.test(value);
+  }
+  const JSONBIN_CONFIGURED = !looksLikePlaceholder(JSONBIN_BIN_ID) && !looksLikePlaceholder(JSONBIN_ACCESS_KEY);
   const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
   const MAX_GLOBAL_ENTRIES = 50;
 
