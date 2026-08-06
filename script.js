@@ -365,6 +365,7 @@
     });
     const target = $(`#${id}`);
     target.classList.add('active', 'fade-in');
+    updateSessionBadge();
   }
 
   /* ------------------------------------------------------------------
@@ -811,6 +812,179 @@
      11. GAME OVER / VITÓRIA / RANKING
      ------------------------------------------------------------------ */
   const RANKING_KEY = 'arquiteto_ranking_v1';
+  const SESSION_KEY = 'arquiteto_session_v1';
+  const STATS_KEY = 'arquiteto_stats_v1';
+  const USERS_KEY = 'arquiteto_users_v1'; // cache local de contas (cadastro/login)
+
+  // -------------------------------------------------------------------
+  // JSONBin.io — mesma configuração usada pelo ranking global. O bin
+  // guarda um único objeto JSON com duas listas: "scores" (ranking) e
+  // "users" (contas de cadastro/login), então dá pra usar as duas
+  // funcionalidades com a mesma conta/chave. Veja README.md.
+  // -------------------------------------------------------------------
+  const JSONBIN_BIN_ID = '6a750f93f5f4af5e29f4f49a';
+  const JSONBIN_ACCESS_KEY = '$2a$10$XUGY9XbamlOm141sEfO5re.57SsC85kRU4pHGOhsX8U5u8ZQnNq0e';
+  const JSONBIN_CONFIGURED = JSONBIN_BIN_ID !== '6a750f93f5f4af5e29f4f49a' && JSONBIN_ACCESS_KEY !== '$2a$10$XUGY9XbamlOm141sEfO5re.57SsC85kRU4pHGOhsX8U5u8ZQnNq0e';
+  const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+  const MAX_GLOBAL_ENTRIES = 50;
+
+  async function fetchBinRecord() {
+    if (!JSONBIN_CONFIGURED) return null;
+    try {
+      const res = await fetch(`${JSONBIN_URL}/latest`, {
+        headers: { 'X-Access-Key': JSONBIN_ACCESS_KEY },
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      return data.record && typeof data.record === 'object' ? data.record : {};
+    } catch (e) {
+      console.warn('JSONBin indisponível, usando dados locais:', e);
+      return null;
+    }
+  }
+
+  async function writeBinRecord(record) {
+    if (!JSONBIN_CONFIGURED) return false;
+    try {
+      const res = await fetch(JSONBIN_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Access-Key': JSONBIN_ACCESS_KEY },
+        body: JSON.stringify(record),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      return true;
+    } catch (e) {
+      console.warn('Não foi possível gravar no JSONBin:', e);
+      return false;
+    }
+  }
+
+  // -- Senha: nunca guardamos em texto puro. Usa SubtleCrypto (SHA-256)
+  //    quando disponível; cai num hash simples só pra não travar em
+  //    ambientes muito antigos sem essa API. Aviso: isso é adequado pra
+  //    um projeto acadêmico, não é o nível de segurança de produção.
+  async function hashPassword(pw) {
+    try {
+      if (window.crypto && crypto.subtle) {
+        const enc = new TextEncoder().encode(pw);
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (e) { /* cai no fallback abaixo */ }
+    let hash = 0;
+    for (let i = 0; i < pw.length; i++) { hash = ((hash << 5) - hash + pw.charCodeAt(i)) | 0; }
+    return `fallback_${Math.abs(hash).toString(16)}`;
+  }
+
+  function loadLocalUsers() {
+    try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch (e) { return []; }
+  }
+  function saveLocalUsers(list) {
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  async function fetchGlobalUsers() {
+    const record = await fetchBinRecord();
+    if (!record) return null;
+    return Array.isArray(record.users) ? record.users : [];
+  }
+  async function pushGlobalUser(user) {
+    const record = (await fetchBinRecord()) || {};
+    const users = Array.isArray(record.users) ? record.users : [];
+    users.push(user);
+    return writeBinRecord({ ...record, users });
+  }
+
+  async function findUserByNickname(nickname) {
+    let list;
+    if (JSONBIN_CONFIGURED) {
+      const global = await fetchGlobalUsers();
+      if (global) list = global;
+    }
+    if (!list) list = loadLocalUsers();
+    return list.find((u) => u.nickname.toLowerCase() === nickname.toLowerCase());
+  }
+
+  async function signupAccount(nickname, password) {
+    const existing = await findUserByNickname(nickname);
+    if (existing) return { ok: false, reason: 'Esse apelido já está em uso. Escolha outro ou faça login.' };
+    const passwordHash = await hashPassword(password);
+    const user = { nickname, passwordHash, createdAt: new Date().toISOString() };
+
+    const localUsers = loadLocalUsers();
+    localUsers.push(user);
+    saveLocalUsers(localUsers);
+
+    if (JSONBIN_CONFIGURED) await pushGlobalUser(user);
+    return { ok: true };
+  }
+
+  async function loginAccount(nickname, password) {
+    const user = await findUserByNickname(nickname);
+    if (!user) return { ok: false, reason: 'Apelido não encontrado. Cadastre-se primeiro.' };
+    const passwordHash = await hashPassword(password);
+    if (passwordHash !== user.passwordHash) return { ok: false, reason: 'Senha incorreta.' };
+    return { ok: true };
+  }
+
+  function loadStats() {
+    try {
+      return JSON.parse(localStorage.getItem(STATS_KEY)) || {
+        gamesPlayed: 0, bestScore: 0, totalDocsRecovered: 0, totalCorrect: 0, totalAnswers: 0,
+      };
+    } catch (e) {
+      return { gamesPlayed: 0, bestScore: 0, totalDocsRecovered: 0, totalCorrect: 0, totalAnswers: 0 };
+    }
+  }
+  function saveStats(stats) {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch (e) {}
+  }
+
+  // Chamado ao fim de toda partida (vitória ou derrota) para alimentar o dashboard.
+  function recordGameEnd({ won, score = 0 }) {
+    const stats = loadStats();
+    stats.gamesPlayed += 1;
+    stats.totalDocsRecovered += State.docsFound;
+    stats.totalCorrect += State.correctAnswers;
+    stats.totalAnswers += State.totalAnswers;
+    if (won && score > stats.bestScore) stats.bestScore = score;
+    saveStats(stats);
+  }
+
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
+  }
+  function saveSession(session) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {}
+  }
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+
+  function updateSessionBadge() {
+    const badge = $('#session-badge');
+    const session = loadSession();
+    if (!badge) return;
+    if (session && session.nickname) {
+      $('#session-badge-name').textContent = session.nickname;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  function resetLoginForm() {
+    $('#login-nickname').value = '';
+    $('#login-password').value = '';
+    $('#login-error').hidden = true;
+  }
+
+  function logout() {
+    clearSession();
+    updateSessionBadge();
+    resetLoginForm();
+    showScreen('screen-login');
+  }
 
   function beginGame() {
     resetState(State.pendingDifficulty || DEFAULT_DIFFICULTY);
@@ -944,6 +1118,7 @@
     AudioEngine.alarm();
     AudioEngine.staticBurst(0.6);
     FX.blackout(1200);
+    recordGameEnd({ won: false });
     setTimeout(() => {
       showScreen('screen-gameover');
       runGameOverSequence(causeKey);
@@ -1051,6 +1226,8 @@
     const tier = getEndingTier();
     const ending = ENDINGS[tier];
 
+    recordGameEnd({ won: true, score });
+
     const titleEl = $('#victory-title');
     titleEl.textContent = ending.title;
     titleEl.className = 'victory-title' + (ending.titleClass ? ` ${ending.titleClass}` : '');
@@ -1062,7 +1239,7 @@
     $('#v-integrity').textContent = `${State.integrity} / ${State.totalIntegritySegments}`;
     $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
     $('#v-score').textContent = String(score);
-    $('#v-name').value = '';
+    $('#v-name').value = loadSession()?.nickname || '';
 
     showScreen('screen-victory');
     AudioEngine.success();
@@ -1078,19 +1255,81 @@
     try { localStorage.setItem(RANKING_KEY, JSON.stringify(list)); } catch (e) {}
   }
 
-  function renderRankingScreen() {
-    const list = loadRanking().sort((a, b) => b.score - a.score).slice(0, 10);
-    const el = $('#ranking-list');
-    el.innerHTML = '';
-    if (list.length === 0) {
-      el.innerHTML = '<li class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</li>';
+  // -- Ranking global: busca e grava só a lista de pontuações no JSONBin,
+  //    preservando as contas de usuário que estejam no mesmo bin. Se não
+  //    estiver configurado (ou a rede falhar), cai pro ranking local.
+  async function fetchGlobalRanking() {
+    const record = await fetchBinRecord();
+    if (!record) return null;
+    return Array.isArray(record.scores) ? record.scores : [];
+  }
+
+  async function pushGlobalScore(entry) {
+    if (!JSONBIN_CONFIGURED) return false;
+    const record = (await fetchBinRecord()) || {};
+    const scores = Array.isArray(record.scores) ? record.scores : [];
+    const updated = [...scores, entry]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_GLOBAL_ENTRIES);
+    return writeBinRecord({ ...record, scores: updated });
+  }
+
+  let rankingCache = []; // última lista carregada (local ou global), pra filtrar sem refetch
+
+  async function renderRankingScreen() {
+    const tbody = $('#ranking-table-body');
+    const noteEl = $('#ranking-source-note');
+    tbody.innerHTML = '<tr><td colspan="6" class="ranking-empty">Carregando…</td></tr>';
+    if (noteEl) noteEl.textContent = '';
+
+    let list;
+    let isGlobal = false;
+    if (JSONBIN_CONFIGURED) {
+      const global = await fetchGlobalRanking();
+      if (global) { list = global; isGlobal = true; }
+    }
+    if (!list) list = loadRanking();
+
+    rankingCache = [...list].sort((a, b) => b.score - a.score);
+    if (noteEl) {
+      noteEl.textContent = isGlobal
+        ? 'ranking global — todo mundo que jogou aparece aqui'
+        : 'ranking local deste navegador (ranking global não configurado)';
+    }
+    renderRankingTable();
+  }
+
+  // Aplica o filtro de dificuldade + pesquisa por nome sobre o cache já
+  // carregado (RF06 tabela / RF07 filtro-pesquisa), sem precisar refetch.
+  function renderRankingTable() {
+    const tbody = $('#ranking-table-body');
+    const search = ($('#ranking-search')?.value || '').trim().toLowerCase();
+    const diffFilter = $('#ranking-filter-difficulty')?.value || 'all';
+
+    const filtered = rankingCache.filter((entry) => {
+      const matchesSearch = !search || entry.name.toLowerCase().includes(search);
+      const matchesDiff = diffFilter === 'all' || entry.difficulty === diffFilter;
+      return matchesSearch && matchesDiff;
+    }).slice(0, 25);
+
+    tbody.innerHTML = '';
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="ranking-empty">Nenhum registro encontrado.</td></tr>';
       return;
     }
-    list.forEach((entry) => {
-      const li = document.createElement('li');
+    filtered.forEach((entry, i) => {
       const diffLabel = DIFFICULTIES[entry.difficulty] ? DIFFICULTIES[entry.difficulty].label : 'MÉDIO';
-      li.innerHTML = `<span>${entry.name} <span class="difficulty-tag">${diffLabel}</span></span><span>${entry.score} pts</span>`;
-      el.appendChild(li);
+      const dateLabel = entry.date ? new Date(entry.date).toLocaleDateString('pt-BR') : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${entry.name}</td>
+        <td>${diffLabel}</td>
+        <td>${entry.score} pts</td>
+        <td>${dateLabel}</td>
+        <td><span class="status-pill">SOBREVIVEU</span></td>
+      `;
+      tbody.appendChild(tr);
     });
   }
 
@@ -1104,14 +1343,79 @@
   }
 
   function init() {
-    // Boot sequence rápido antes do menu
+    // Boot sequence rápido antes do login/menu
     setTimeout(() => {
-      showScreen('screen-menu');
+      const session = loadSession();
+      if (session) {
+        showScreen('screen-menu');
+      } else {
+        showScreen('screen-login');
+      }
       FX.spawnParticles($('#menu-particles'));
       FX.startNoiseLoop();
     }, 900);
 
     attachMenuSounds();
+
+    // -- Login / Cadastro (RF01) --
+    let loginMode = 'login';
+    $('#tab-login').addEventListener('click', () => {
+      loginMode = 'login';
+      $('#tab-login').classList.add('active');
+      $('#tab-signup').classList.remove('active');
+      $('#login-submit-btn').textContent = 'ACESSAR SISTEMA →';
+      $('#login-error').hidden = true;
+    });
+    $('#tab-signup').addEventListener('click', () => {
+      loginMode = 'signup';
+      $('#tab-signup').classList.add('active');
+      $('#tab-login').classList.remove('active');
+      $('#login-submit-btn').textContent = 'CRIAR CONTA →';
+      $('#login-error').hidden = true;
+    });
+
+    $('#login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nickname = $('#login-nickname').value.trim();
+      const password = $('#login-password').value;
+      const errEl = $('#login-error');
+      const submitBtn = $('#login-submit-btn');
+
+      if (!nickname || !password) {
+        errEl.textContent = 'Preencha apelido e senha para continuar.';
+        errEl.hidden = false;
+        return;
+      }
+
+      submitBtn.disabled = true;
+      const originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'VERIFICANDO…';
+
+      const result = loginMode === 'signup'
+        ? await signupAccount(nickname, password)
+        : await loginAccount(nickname, password);
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+
+      if (!result.ok) {
+        errEl.textContent = result.reason;
+        errEl.hidden = false;
+        return;
+      }
+
+      errEl.hidden = true;
+      saveSession({ nickname, loginAt: new Date().toISOString() });
+      updateSessionBadge();
+      showScreen('screen-menu');
+    });
+
+    // -- Badge de sessão / logout (RF02 / RF08) --
+    $('#session-badge-logout').addEventListener('click', logout);
+
+    // -- Ranking: filtro/pesquisa (RF07) --
+    $('#ranking-search').addEventListener('input', renderRankingTable);
+    $('#ranking-filter-difficulty').addEventListener('change', renderRankingTable);
 
     $('#btn-play').addEventListener('click', () => {
       AudioEngine.ensureCtx();
@@ -1141,8 +1445,7 @@
     $('#btn-credits').addEventListener('click', () => showScreen('screen-credits'));
     $('#btn-ranking').addEventListener('click', () => { renderRankingScreen(); showScreen('screen-ranking'); });
     $('#btn-exit').addEventListener('click', () => {
-      setArchitectMessage && null;
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#7d7f88;">Conexão encerrada.</div>';
+      logout();
     });
 
     $$('.back-btn').forEach((btn) => {
@@ -1157,16 +1460,24 @@
       showScreen('screen-menu');
     });
 
-    $('#btn-save-score').addEventListener('click', () => {
+    $('#btn-save-score').addEventListener('click', async () => {
       const nameInput = $('#v-name');
+      const btn = $('#btn-save-score');
       const name = (nameInput.value.trim() || 'ANÔNIMO').slice(0, 16).toUpperCase();
       const { score } = computeScore();
+      const entry = { name, score, difficulty: State.difficulty, date: new Date().toISOString() };
+
+      // Salva local imediatamente (sempre funciona, mesmo offline)
       const list = loadRanking();
-      list.push({ name, score, difficulty: State.difficulty, date: new Date().toISOString() });
+      list.push(entry);
       saveRanking(list);
+
       nameInput.disabled = true;
-      $('#btn-save-score').textContent = 'PONTUAÇÃO SALVA ✓';
-      $('#btn-save-score').disabled = true;
+      btn.disabled = true;
+      btn.textContent = 'SALVANDO…';
+
+      const wentGlobal = await pushGlobalScore(entry);
+      btn.textContent = wentGlobal ? 'PONTUAÇÃO SALVA NO RANKING GLOBAL ✓' : 'PONTUAÇÃO SALVA (LOCAL) ✓';
     });
   }
 

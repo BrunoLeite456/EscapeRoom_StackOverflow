@@ -50,6 +50,42 @@
 </section>
 
 <!-- ============================================================
+     TELA: LOGIN (RF01) — obrigatória antes de acessar o sistema
+     ============================================================ -->
+<section id="screen-login" class="screen">
+  <div class="panel-card login-card">
+    <h2 class="panel-title">// ACESSO AO TERMINAL-9</h2>
+    <p class="panel-body login-intro">Identifique-se para o sistema antes de continuar. O Arquiteto guarda registro de quem entra.</p>
+
+    <div class="login-tabs">
+      <button type="button" class="login-tab active" id="tab-login" data-mode="login">ENTRAR</button>
+      <button type="button" class="login-tab" id="tab-signup" data-mode="signup">CADASTRAR</button>
+    </div>
+
+    <form id="login-form" class="login-form" autocomplete="off">
+      <label class="login-field">
+        <span>Apelido</span>
+        <input type="text" id="login-nickname" required maxlength="20" placeholder="Como quer ser chamado">
+      </label>
+      <label class="login-field">
+        <span>Senha</span>
+        <input type="password" id="login-password" required minlength="4" maxlength="40" placeholder="Sua senha">
+      </label>
+      <p id="login-error" class="login-error" hidden></p>
+      <button type="submit" class="menu-btn" id="login-submit-btn">ACESSAR SISTEMA →</button>
+    </form>
+  </div>
+</section>
+
+<!-- ============================================================
+     BADGE DE SESSÃO (RF02) — nome do usuário logado, canto superior direito
+     ============================================================ -->
+<div id="session-badge" class="session-badge" hidden>
+  <span id="session-badge-name">—</span>
+  <button id="session-badge-logout" class="session-badge-logout" title="Encerrar sessão">SAIR</button>
+</div>
+
+<!-- ============================================================
      TELA: MENU PRINCIPAL
      ============================================================ -->
 <section id="screen-menu" class="screen">
@@ -97,7 +133,7 @@
         <li><strong>Integridade do Projeto</strong> — cada erro consome um segmento. Zerar a barra encerra o jogo.</li>
         <li>Observe pistas com atenção: emails, post-its, áudios e entrevistas escondem os verdadeiros requisitos.</li>
       </ul>
-      <p class="panel-warning">O Arquiteto não pune por raiva. Ele pune para ensinar.</p>
+      <p class="panel-warning">O Arquiteto não pune por raiva...</p>
     </div>
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
@@ -123,12 +159,34 @@
      TELA: RANKING
      ============================================================ -->
 <section id="screen-ranking" class="screen">
-  <div class="panel-card">
+  <div class="panel-card ranking-card">
     <h2 class="panel-title">// SOBREVIVENTES</h2>
-    <div class="panel-body">
-      <ol id="ranking-list" class="ranking-list">
-        <li class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</li>
-      </ol>
+    <p class="ranking-source-note" id="ranking-source-note"></p>
+    <div class="ranking-filters">
+      <input type="text" id="ranking-search" class="ranking-search" placeholder="Pesquisar por nome…">
+      <select id="ranking-filter-difficulty" class="ranking-select">
+        <option value="all">Todas as dificuldades</option>
+        <option value="facil">FÁCIL</option>
+        <option value="medio">MÉDIO</option>
+        <option value="dificil">DIFÍCIL</option>
+      </select>
+    </div>
+    <div class="ranking-table-wrap">
+      <table class="ranking-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nome</th>
+            <th>Dificuldade</th>
+            <th>Pontuação</th>
+            <th>Data</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="ranking-table-body">
+          <tr><td colspan="6" class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</td></tr>
+        </tbody>
+      </table>
     </div>
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
