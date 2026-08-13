@@ -121,15 +121,15 @@
   <div class="panel-card">
     <h2 class="panel-title">// INSTRUÇÕES</h2>
     <div class="panel-body">
-      <p>Você está preso em uma instalação controlada por uma inteligência chamada <strong>O Arquiteto</strong>. Para sair, precisa reconstruir a documentação de um sistema que fracassou por má Engenharia de Requisitos.</p>
+      <p>Uma inteligência chamada <strong>O Arquiteto</strong> foi corrompida. No núcleo do sistema existe uma segunda entidade, o <strong>C.O.N.T.R.A.</strong>, apontada como a origem da corrupção. Você foi enviado para recuperar os dados perdidos, localizar o C.O.N.T.R.A. e eliminá-lo — e restaurar o Arquiteto.</p>
       <ul>
         <li><strong>Dificuldade</strong> — antes de começar, escolha entre Fácil, Médio ou Difícil. Isso muda o tempo total e a tolerância a erros.</li>
-        <li><strong>5 fases</strong> — cada uma revela um artefato: Requisitos Funcionais, Requisitos Não Funcionais, Casos de Uso, Modelo Entidade-Relacionamento e Fluxo do Sistema.</li>
+        <li><strong>4 fases</strong> — Arquivos Corrompidos, Organização de Arquivos, o Firewall do C.O.N.T.R.A. e a Senha em Lote, até eliminá-lo. O confronto final com O Arquiteto chega numa próxima versão.</li>
         <li><strong>Cronômetro</strong> — você tem alguns minutos. Quando zera, o projeto é cancelado.</li>
         <li><strong>Integridade do Projeto</strong> — cada erro consome um segmento. Zerar a barra encerra o jogo.</li>
-        <li>Observe pistas com atenção: emails, post-its, áudios e entrevistas escondem os verdadeiros requisitos.</li>
+        <li>Em cada fase, classifique corretamente Requisito Funcional, Requisito Não Funcional e Regra de Negócio para avançar.</li>
       </ul>
-      <p class="panel-warning">O Arquiteto não pune por raiva...</p>
+      <p class="panel-warning">Nem tudo que parece uma ameaça é a verdadeira ameaça...</p>
     </div>
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
@@ -144,7 +144,7 @@
     <div class="panel-body">
       <p>Projeto acadêmico de Engenharia de Requisitos.</p>
       <p>Design, narrativa e código: <strong>Equipe do Projeto</strong>.</p>
-      <p>Personagem original: <strong>O Arquiteto</strong> — uma inteligência que constrói e destrói sistemas mal especificados.</p>
+      <p>Personagens originais: <strong>O Arquiteto</strong> — a inteligência corrompida que domina o sistema — e <strong>C.O.N.T.R.A.</strong>, a entidade que tentava impedi-lo.</p>
       <p>Desenvolvido inteiramente em HTML5, CSS3 e JavaScript puro, sem frameworks ou bibliotecas externas.</p>
     </div>
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
@@ -212,7 +212,13 @@
         <span class="difficulty-meta">7 segmentos de integridade</span>
         <span class="difficulty-desc">Pouco tempo, quase nenhuma margem. A sala racha rápido e cedo.</span>
       </button>
+      <button class="difficulty-option difficulty-impossible" data-difficulty="impossivel" id="diff-impossivel" hidden>
+        <span class="difficulty-name">IMPOSSÍVEL <span class="difficulty-tag">???</span></span>
+        <span class="difficulty-meta">modo secreto desbloqueado</span>
+        <span class="difficulty-desc">Esqueça requisitos, esqueça o PC. Só você, quatro teclas e a música.</span>
+      </button>
     </div>
+    <p class="difficulty-locked-hint" id="difficulty-locked-hint">Vença no modo DIFÍCIL para desbloquear algo... diferente.</p>
 
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
@@ -252,6 +258,16 @@
      ============================================================ -->
 <section id="screen-game" class="screen">
 
+  <!-- Cartão de capítulo: tela preta cheia entre as fases -->
+  <div id="phase-title-card" class="phase-title-card" hidden>
+    <div class="phase-title-card-inner">
+      <div class="phase-title-card-eyebrow" id="ptc-eyebrow">FASE 1</div>
+      <h2 class="phase-title-card-name" id="ptc-name">Arquivos Perdidos</h2>
+      <p class="phase-title-card-story" id="ptc-story"></p>
+      <button class="menu-btn phase-title-card-btn" id="ptc-continue">CONTINUAR →</button>
+    </div>
+  </div>
+
   <!-- Cena: o quarto ao fundo, o PC quebrado em primeiro plano -->
   <div class="room-scene">
     <div class="room-wall" aria-hidden="true">
@@ -267,6 +283,7 @@
           <div class="monitor-topbar">
             <span class="monitor-led-strip" id="integrity-leds" title="Integridade do sistema"></span>
             <span class="qtimer" id="hud-qtimer">05:00</span>
+            <button class="pause-btn" id="pause-btn" aria-label="Pausar jogo" title="Pausar">❚❚</button>
           </div>
           <div class="monitor-screen">
             <main id="phase-root"></main>
@@ -321,6 +338,19 @@
     </div>
   </div>
 
+  <!-- Menu de pausa -->
+  <div class="pause-overlay" id="pause-overlay" hidden>
+    <div class="pause-panel">
+      <h2 class="pause-title">PAUSADO</h2>
+      <p class="pause-sub">O cronômetro parou. O Arquiteto pode esperar.</p>
+      <nav class="pause-actions">
+        <button class="menu-btn" id="pause-continue-btn"><span class="menu-btn-index">01</span>CONTINUAR</button>
+        <button class="menu-btn" id="pause-restart-btn"><span class="menu-btn-index">02</span>REINICIAR PARTIDA</button>
+        <button class="menu-btn" id="pause-menu-btn"><span class="menu-btn-index">03</span>MENU PRINCIPAL</button>
+      </nav>
+    </div>
+  </div>
+
   <!-- Rodapé de mensagens do Arquiteto -->
   <footer id="architect-log">
     <span class="architect-tag">O ARQUITETO:</span>
@@ -367,6 +397,75 @@
         <button class="menu-btn" id="btn-play-again">JOGAR NOVAMENTE</button>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     TELA: MODO IMPOSSÍVEL — GUITAR HERO EM TELA CHEIA
+     Nada de PC, nada de fases de requisitos: reflexo puro.
+     Faixa "PERDEDOR" é uma composição instrumental 100% original,
+     gerada e tocada ao vivo via Web Audio API (sem áudio externo).
+     ============================================================ -->
+<section id="screen-guitarhero" class="screen gh-screen">
+  <div class="gh-stage">
+
+    <div class="gh-hud">
+      <div class="gh-hud-block gh-hud-left">
+        <span class="gh-hud-label">PONTOS</span>
+        <span class="gh-hud-value" id="gh-score">0</span>
+      </div>
+      <div class="gh-hud-block gh-hud-mid">
+        <span class="gh-track-name">RITMO: 83 BPM · Fá menor — tempo de "Loser" (Tame Impala)</span>
+        <div class="gh-health-track"><div class="gh-health-fill" id="gh-health-fill"></div></div>
+      </div>
+      <div class="gh-hud-block gh-hud-right">
+        <span class="gh-hud-label">COMBO</span>
+        <span class="gh-hud-value" id="gh-combo">0x</span>
+      </div>
+      <button class="gh-quit-btn" id="gh-quit-btn" aria-label="Sair do modo impossível">✕</button>
+    </div>
+
+    <div class="gh-lanes" id="gh-lanes">
+      <div class="gh-lane" data-lane="0"></div>
+      <div class="gh-lane" data-lane="1"></div>
+      <div class="gh-lane" data-lane="2"></div>
+      <div class="gh-lane" data-lane="3"></div>
+      <div class="gh-hitline"></div>
+      <div class="gh-notes-layer" id="gh-notes-layer"></div>
+    </div>
+
+    <div class="gh-feedback" id="gh-feedback"></div>
+
+    <div class="gh-keys">
+      <span class="gh-key" data-lane="0">D</span>
+      <span class="gh-key" data-lane="1">F</span>
+      <span class="gh-key" data-lane="2">J</span>
+      <span class="gh-key" data-lane="3">K</span>
+    </div>
+
+    <div class="gh-overlay" id="gh-intro" hidden>
+      <h2 class="gh-overlay-title">MODO IMPOSSÍVEL</h2>
+      <p class="gh-overlay-text">Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.</p>
+      <p class="gh-overlay-track">RITMO: 83 BPM, tom de Fá menor <span>(o andamento real de "Loser", Tame Impala — jogo 100% silencioso, sem áudio)</span></p>
+      <div class="gh-overlay-keys">
+        <span>D</span><span>F</span><span>J</span><span>K</span>
+      </div>
+      <button class="menu-btn" id="gh-start-btn">TOCAR ▸</button>
+      <button class="menu-btn gh-overlay-back" id="gh-intro-back-btn">&larr; VOLTAR</button>
+    </div>
+
+    <div class="gh-overlay" id="gh-result" hidden>
+      <h2 class="gh-overlay-title" id="gh-result-title">FIM DE JOGO</h2>
+      <p class="gh-overlay-text" id="gh-result-sub"></p>
+      <div class="gh-result-stats">
+        <div class="stat-row"><span>Pontuação</span><strong id="gh-result-score"></strong></div>
+        <div class="stat-row"><span>Maior combo</span><strong id="gh-result-combo"></strong></div>
+        <div class="stat-row"><span>Precisão</span><strong id="gh-result-acc"></strong></div>
+      </div>
+      <button class="menu-btn" id="gh-result-retry-btn">↺ TOCAR DE NOVO</button>
+      <button class="menu-btn gh-overlay-back" id="gh-result-menu-btn">VOLTAR AO MENU</button>
+    </div>
+
   </div>
 </section>
 

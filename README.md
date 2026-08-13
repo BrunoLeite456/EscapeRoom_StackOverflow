@@ -44,6 +44,16 @@ Além do escape room em si, o projeto implementa os seguintes requisitos funcion
 
 
 
+## Fase final (chefão) na Difícil
+
+Não existe mais uma "Fase 5" jogável, nem uma tela de fase final, nem uma tela de vitória separada. O confronto com **O Arquiteto** acontece só narrativamente, dentro da própria cutscene de revelação do C.O.N.T.R.A.: depois da reviravolta, a mesma tela anuncia que o **modo Impossível foi liberado**, avisa que **"O Arquiteto está à sua espera"** e, logo abaixo dessa mensagem, na mesma tela, já mostra o placar da partida (tempo, erros, integridade, precisão, pontuação) para salvar no ranking. O Arquiteto **não é derrotado** nesse ponto — a queda dele só acontece de fato no Modo Impossível. A única exceção é o Final Secreto (zero erros na partida inteira), que ainda usa a tela de vitória própria, por ser um desfecho narrativo à parte.
+
+## Modo secreto: Impossível
+
+Ao vencer uma partida na dificuldade **Difícil**, uma quarta opção — **IMPOSSÍVEL** — é liberada na tela de seleção de dificuldade (fica salva no `localStorage`, então some só se você limpar os dados do site). Escolher essa dificuldade não abre o escape room: pula direto pra um minigame de ritmo estilo Guitar Hero em **tela cheia** (sem o "PC" quebrado, sem HUD de integridade, sem perguntas de requisitos). São 4 pistas (teclas `D` `F` `J` `K`) e uma barra de vida.
+
+Esse modo é **100% silencioso — não toca nenhum áudio**. O cronômetro das notas usa só o relógio do navegador (`performance.now()`), sem Web Audio API. O ritmo de queda das notas é calcado no andamento real e público de "Loser", do Tame Impala (83 BPM, tom de Fá menor — dados de tempo/tonalidade, que são fatos, não expressão protegida por direito autoral); o padrão de qual pista cada nota usa é um motivo original, gerado algoritmicamente só pra este minigame. Em nenhum momento a gravação, a melodia ou a letra da música são reproduzidas.
+
 ## Persistência
 
 O ranking de pontuações e as contas de usuário (apelido + senha) são salvos em `localStorage` no navegador como fallback, e também podem ser configurados como **globais** (visíveis/acessíveis de qualquer aparelho), usando o [JSONBin.io](https://jsonbin.io) como banco de dados gratuito na nuvem — a mesma configuração serve para os dois.
