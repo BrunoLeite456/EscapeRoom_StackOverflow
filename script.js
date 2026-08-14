@@ -323,30 +323,63 @@
     facil:     { label: 'FÁCIL',     minutes: 75, segments: 12, scoreMultiplier: 0.85, hasBoss: false },
     medio:     { label: 'MÉDIO',     minutes: 60, segments: 10, scoreMultiplier: 1.0,  hasBoss: false },
     dificil:   { label: 'DIFÍCIL',   minutes: 45, segments: 7,  scoreMultiplier: 1.25, hasBoss: true },
-    // "Impossível" é o modo secreto: não roda o motor de fases nem o
-    // cronômetro normal — em vez disso, beginGame() desvia pro minigame
-    // de ritmo em tela cheia (ver GuitarHero mais abaixo). Os campos
-    // minutes/segments/hasBoss ficam aqui só por consistência de forma,
-    // mas não são usados nesse modo.
-    impossivel:{ label: 'IMPOSSÍVEL', minutes: 0, segments: 1, scoreMultiplier: 1.0, hasBoss: false, isRhythmMode: true },
+    // "O Arquiteto" é o modo secreto de ritmo (ex-"Impossível"): não roda
+    // o motor de fases nem o cronômetro normal — em vez disso, o handler
+    // de clique desvia direto pro minigame de ritmo em tela cheia (ver
+    // GuitarHero mais abaixo). Os campos minutes/segments/hasBoss ficam
+    // aqui só por consistência de forma, mas não são usados nesse modo.
+    // Liberado ao vencer a Difícil.
+    arquiteto: { label: 'O ARQUITETO', minutes: 0, segments: 1, scoreMultiplier: 1.0, hasBoss: false, isRhythmMode: true },
+    // "Impossível" (novo) é a Difícil inteira, sem nenhuma história, com
+    // O Arquiteto (o mesmo minigame de ritmo acima) anexado como etapa
+    // final — só que com uma única vida: um erro no ritmo encerra a
+    // corrida na hora. Ver goToNextPhase()/startFinalRhythmGauntlet().
+    // Liberado ao vencer O Arquiteto (a faixa inteira, sem falhar).
+    impossivel:{ label: 'IMPOSSÍVEL', minutes: 45, segments: 1, scoreMultiplier: 1.5, hasBoss: false, isFinalGauntlet: true, noStory: true },
   };
   const DEFAULT_DIFFICULTY = 'medio';
-  // Só é liberado depois de vencer uma partida na Difícil.
-  const IMPOSSIBLE_UNLOCK_KEY = 'arquiteto_impossible_unlocked_v1';
+  // Libera "O Arquiteto" — só depois de vencer uma partida na Difícil.
+  // Reaproveita a chave antiga de localStorage (mesmo nome de antes de O
+  // Arquiteto se chamar "Impossível"), então quem já tinha liberado o
+  // modo secreto continua com ele liberado.
+  const ARCHITECT_UNLOCK_KEY = 'arquiteto_impossible_unlocked_v1';
+  function isArchitectUnlocked() {
+    try { return localStorage.getItem(ARCHITECT_UNLOCK_KEY) === '1'; } catch (e) { return false; }
+  }
+  function unlockArchitectMode() {
+    try { localStorage.setItem(ARCHITECT_UNLOCK_KEY, '1'); } catch (e) {}
+  }
+  // Libera a nova dificuldade "Impossível" — só depois de vencer O
+  // Arquiteto (concluir a faixa de ritmo inteira sem falhar).
+  const IMPOSSIBLE_UNLOCK_KEY = 'arquiteto_final_unlocked_v1';
   function isImpossibleUnlocked() {
     try { return localStorage.getItem(IMPOSSIBLE_UNLOCK_KEY) === '1'; } catch (e) { return false; }
   }
   function unlockImpossibleMode() {
     try { localStorage.setItem(IMPOSSIBLE_UNLOCK_KEY, '1'); } catch (e) {}
   }
-  // Mostra/esconde a opção "Impossível" e a dica de bloqueio na tela de
-  // seleção de dificuldade, conforme o flag salvo no localStorage.
+  // Mostra/esconde as opções secretas ("O Arquiteto" e "Impossível") e a
+  // dica de bloqueio na tela de seleção de dificuldade, conforme os
+  // flags salvos no localStorage — cada um libera na sua própria etapa.
   function refreshDifficultyOptions() {
-    const unlocked = isImpossibleUnlocked();
-    const btn = $('#diff-impossivel');
+    const architectUnlocked = isArchitectUnlocked();
+    const impossibleUnlocked = isImpossibleUnlocked();
+    const architectBtn = $('#diff-arquiteto');
+    const impossibleBtn = $('#diff-impossivel');
     const hint = $('#difficulty-locked-hint');
-    if (btn) btn.hidden = !unlocked;
-    if (hint) hint.hidden = unlocked;
+    if (architectBtn) architectBtn.hidden = !architectUnlocked;
+    if (impossibleBtn) impossibleBtn.hidden = !impossibleUnlocked;
+    if (hint) {
+      if (!architectUnlocked) {
+        hint.hidden = false;
+        hint.textContent = 'Vença no modo DIFÍCIL para desbloquear algo... diferente.';
+      } else if (!impossibleUnlocked) {
+        hint.hidden = false;
+        hint.textContent = 'Vença n\'O ARQUITETO, sem falhar, para desbloquear o verdadeiro Impossível.';
+      } else {
+        hint.hidden = true;
+      }
+    }
   }
 
   const State = {
@@ -373,6 +406,10 @@
     // pra garantir que ela dispara uma única vez, bem entre a Fase 4 e a
     // Fase 5, na Difícil. Ver goToNextPhase() e triggerBossReveal().
     bossRevealShown: false,
+    // Usado só pela dificuldade "Impossível": guarda a pontuação final
+    // combinada (fases + etapa de ritmo) pra que o ranking use o mesmo
+    // número mostrado na tela — ver finishImpossibleRun() e autoSaveScore().
+    finalScoreOverride: null,
   };
 
   function resetState(difficultyKey) {
@@ -390,6 +427,9 @@
     State.totalAnswers = 0;
     State.running = false;
     State.bossRevealShown = false;
+    State.finalScoreOverride = null;
+    document.body.classList.remove('firewall-active');
+    fireTimerMode = false;
     // A lista de fases da partida é montada aqui: o chefão (Fase 5, "O
     // Arquiteto") só entra no fluxo quando a dificuldade escolhida libera
     // (hoje, só a Difícil). Ver getActivePhases().
@@ -598,6 +638,23 @@
   let qTimeLeft = 0;
   let qTimerOnExpire = null;
 
+  // Modo especial usado só pela Fase 3 (Firewall): em vez do cronômetro
+  // numérico de sempre, o tempo é mostrado como um papel pegando fogo.
+  // `fireTimerTotal` guarda a duração cheia da contagem atual (10s por
+  // pergunta) pra calcular a % já "queimada".
+  let fireTimerMode = false;
+  let fireTimerTotal = 0;
+
+  function updateFireTimerVisual() {
+    const burnt = $('#firewall-burnt');
+    if (!burnt) return;
+    const total = fireTimerTotal || 1;
+    const pct = clamp(1 - qTimeLeft / total, 0, 1);
+    burnt.style.width = `${Math.round(pct * 100)}%`;
+    const wrap = $('#firewall-timer');
+    if (wrap) wrap.classList.toggle('timer-critical', qTimeLeft <= 3);
+  }
+
   function updateQTimerDisplay() {
     const text = formatTime(qTimeLeft);
     const critical = qTimeLeft <= 30;
@@ -606,6 +663,7 @@
       el.textContent = text;
       el.classList.toggle('time-critical', critical);
     });
+    if (fireTimerMode) updateFireTimerVisual();
   }
 
   function stopQuestionTimer() {
@@ -627,6 +685,7 @@
   function startPhaseTimer(totalSeconds, onExpire) {
     stopQuestionTimer();
     qTimeLeft = totalSeconds;
+    fireTimerTotal = totalSeconds;
     qTimerOnExpire = onExpire;
     updateQTimerDisplay();
     runQuestionTimerInterval();
@@ -657,8 +716,12 @@
    * (Arquivos Perdidos), onde cada acerto recupera um documento
    * individualmente — ver PHASES[0].
    */
-  function renderSequentialQuestions(root, { questions, options, onAllDone, docProgress, layers }) {
+  function renderSequentialQuestions(root, { questions, options, onAllDone, docProgress, layers, perQuestionSeconds, fireTimer }) {
     let idx = 0;
+    // Modo exclusivo da Fase 3 (Firewall): 10s por pergunta, mostrados
+    // como um papel pegando fogo, em vez do cronômetro único e acumulado
+    // das outras fases.
+    const fireTheme = !!fireTimer;
 
     // Se `layers` for passado (ex: as 3 camadas do Firewall), divide as
     // perguntas em grupos iguais e cada grupo mostra o rótulo da camada
@@ -684,8 +747,70 @@
       container.appendChild(strip);
     }
 
+    // Brasa subindo pela tela — só na Fase 3 (Firewall). Posições e
+    // atrasos aleatórios pra não parecer um padrão repetido.
+    function renderEmbers(container) {
+      const wrap = document.createElement('div');
+      wrap.className = 'firewall-embers';
+      wrap.setAttribute('aria-hidden', 'true');
+      for (let i = 0; i < 16; i++) {
+        const spark = document.createElement('span');
+        spark.style.left = `${Math.round(Math.random() * 100)}%`;
+        spark.style.animationDelay = `${(Math.random() * 3.2).toFixed(2)}s`;
+        spark.style.animationDuration = `${(2.6 + Math.random() * 1.8).toFixed(2)}s`;
+        spark.style.setProperty('--drift', `${Math.round(Math.random() * 34 - 17)}px`);
+        wrap.appendChild(spark);
+      }
+      container.appendChild(wrap);
+    }
+
+    // Fileira de chamas lambendo a base da tela — puramente decorativo,
+    // reforça o clima de fogo da fase inteira (não só do pavio).
+    function renderFireFloor(container) {
+      const wrap = document.createElement('div');
+      wrap.className = 'firewall-flames-floor';
+      wrap.setAttribute('aria-hidden', 'true');
+      for (let i = 0; i < 9; i++) {
+        const lick = document.createElement('span');
+        lick.className = 'flame-lick';
+        lick.style.left = `${Math.round((i / 9) * 100 + Math.random() * 6)}%`;
+        lick.style.animationDelay = `${(Math.random() * 1.4).toFixed(2)}s`;
+        lick.style.animationDuration = `${(0.9 + Math.random() * 0.6).toFixed(2)}s`;
+        const scale = (0.7 + Math.random() * 0.7).toFixed(2);
+        lick.style.setProperty('--scale', scale);
+        wrap.appendChild(lick);
+      }
+      container.appendChild(wrap);
+    }
+
+    // O "cronômetro" da Fase 3: um pavio fino, na horizontal, que
+    // queima da esquerda pra direita conforme os 10s da pergunta
+    // passam. `updateFireTimerVisual()` (fora desta função) atualiza a
+    // largura de `#firewall-burnt` a cada tick do cronômetro
+    // compartilhado — aqui só criamos a marcação.
+    function renderFireTimer(container) {
+      const wrap = document.createElement('div');
+      wrap.className = 'firewall-timer';
+      wrap.id = 'firewall-timer';
+      wrap.innerHTML = `
+        <div class="firewall-timer-label">RESPONDA ANTES QUE QUEIME</div>
+        <div class="firewall-fuse">
+          <div class="firewall-fuse-rope"></div>
+          <div class="firewall-fuse-burnt" id="firewall-burnt">
+            <div class="firewall-fuse-flame"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      `;
+      container.appendChild(wrap);
+    }
+
     function renderCard(q) {
       root.innerHTML = '';
+      if (fireTheme) {
+        root.classList.add('firewall-phase');
+        renderEmbers(root);
+        renderFireFloor(root);
+      }
       renderProgressStrip(root);
 
       const card = document.createElement('div');
@@ -713,9 +838,18 @@
       });
 
       card.appendChild(count);
+      if (fireTheme) renderFireTimer(card);
       card.appendChild(text);
       card.appendChild(opts);
       root.appendChild(card);
+
+      // Na Fase 3, cada pergunta tem seu próprio cronômetro de 10s (em
+      // vez do cronômetro único acumulado das outras fases) — reinicia
+      // a cada carta nova.
+      if (fireTheme) {
+        fireTimerMode = true;
+        startPhaseTimer(perQuestionSeconds || 10, onQuestionTimeout);
+      }
     }
 
     function showRestoreBanner(q, onDone) {
@@ -737,11 +871,36 @@
       setTimeout(onAllDone, 1200); // acabou o tempo da fase inteira
     }
 
+    // Exclusivo da Fase 3: o papel termina de queimar antes da resposta.
+    // Diferente do estouro do cronômetro normal, aqui só a pergunta
+    // atual é perdida — a camada resiste, o jogo mostra a resposta
+    // certa e segue pra próxima pergunta (ou fecha a fase, se era a
+    // última).
+    function onQuestionTimeout() {
+      const q = questions[idx];
+      registerMistake();
+      $$('.option-btn', root).forEach((b) => {
+        b.disabled = true;
+        if (b.textContent === q.correct) b.classList.add('correct-flash');
+      });
+      const wrap = $('#firewall-timer', root);
+      if (wrap) wrap.classList.add('timer-burnt-out');
+      setTimeout(() => {
+        idx += 1;
+        if (idx >= questions.length) { stopQuestionTimer(); onAllDone(); }
+        else renderCard(questions[idx]);
+      }, 1100);
+    }
+
     function handleAnswer(choice, btnEl, q) {
       if (choice === q.correct) {
         btnEl.classList.add('correct-flash');
         $$('.option-btn', root).forEach((b) => { b.disabled = true; });
         registerSuccess();
+        // Responder certo apaga o fogo dessa pergunta na hora — sem
+        // isso o cronômetro de 10s da carta anterior continuaria
+        // rodando por baixo durante a transição pra próxima.
+        if (fireTheme) stopQuestionTimer();
 
         const advance = () => {
           idx += 1;
@@ -761,9 +920,11 @@
       }
     }
 
-    const totalSeconds = questions.length * SECONDS_PER_QUESTION;
     renderCard(questions[idx]);
-    startPhaseTimer(totalSeconds, timeUpOnCurrentQuestion);
+    if (!fireTheme) {
+      const totalSeconds = questions.length * SECONDS_PER_QUESTION;
+      startPhaseTimer(totalSeconds, timeUpOnCurrentQuestion);
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -1634,7 +1795,11 @@
     // normais — não há mais "FASE FINAL" nem suspense extra aqui.
     eyebrow.textContent = `FASE ${index + 1}`;
     name.textContent = phase.title;
-    story.textContent = phase.story || phase.introMessage || '';
+    // Na dificuldade Impossível não existe história — só o desafio. Ver
+    // DIFFICULTIES.impossivel.noStory.
+    const noStory = (DIFFICULTIES[State.difficulty] || {}).noStory;
+    story.hidden = !!noStory;
+    story.textContent = noStory ? '' : (phase.story || phase.introMessage || '');
     card.hidden = false;
     continueBtn.disabled = true;
     continueBtn.classList.add('is-hidden');
@@ -1660,6 +1825,13 @@
   function goToNextPhase() {
     State.currentPhaseIndex += 1;
     if (State.currentPhaseIndex >= State.phases.length) {
+      // Na dificuldade Impossível não existe vitória normal nem cutscene
+      // do C.O.N.T.R.A.: depois da 4ª fase é direto pra etapa final —
+      // O Arquiteto, com uma única vida. Ver startFinalRhythmGauntlet().
+      if ((DIFFICULTIES[State.difficulty] || {}).isFinalGauntlet) {
+        startFinalRhythmGauntlet();
+        return;
+      }
       triggerVictory();
       return;
     }
@@ -1731,16 +1903,16 @@
     stopGameLoops();
     const { precision, score } = computeScore();
     recordGameEnd({ won: true, score });
-    if (State.difficulty === 'dificil') unlockImpossibleMode();
+    if (State.difficulty === 'dificil') unlockArchitectMode();
 
     $('#victory-sub').textContent = 'C.O.N.T.R.A. está morto. O Arquiteto continua de pé — e agora sabe que você está vindo.';
-    $('#victory-eerie').textContent = 'O confronto real só existe em um lugar: o Modo Impossível.';
+    $('#victory-eerie').textContent = 'O confronto real só existe em um lugar: O ARQUITETO.';
     $('#v-time').textContent = formatTime(State.timeLeft);
     $('#v-errors').textContent = String(State.mistakes);
     $('#v-integrity').textContent = `${State.integrity} / ${State.totalIntegritySegments}`;
     $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
     $('#v-score').textContent = String(score);
-    $('#v-name').value = loadSession()?.nickname || '';
+    autoSaveScore(score);
 
     stopVictoryAutoScroll();
     const typedEl = $('#victory-typed');
@@ -1759,6 +1931,11 @@
     const phase = State.phases[State.currentPhaseIndex];
     const root = $('#phase-root');
     root.innerHTML = '';
+    // Reseta o estilo exclusivo da Fase 3 (Firewall) — evita que a tema
+    // de fogo (ou o cronômetro numérico escondido) vaze pra outra fase.
+    root.classList.remove('firewall-phase');
+    fireTimerMode = false;
+    document.body.classList.toggle('firewall-active', phase.fireTimer === true);
     toggleNotebook(false);
     pauseTimers(true);
 
@@ -1801,6 +1978,8 @@
       options: phase.options,
       docProgress: phase.perDocumentRecovery ? { getLabel: (q) => q.docLabel || 'documento' } : null,
       layers: phase.layers || null,
+      perQuestionSeconds: phase.timePerQuestion || null,
+      fireTimer: phase.fireTimer === true,
       onAllDone: () => {
         if (phase.perDocumentRecovery) {
           State.docsFound += phase.questions.length;
@@ -1881,9 +2060,14 @@
       slug: 'C.O.N.T.R.A.',
       title: 'C.O.N.T.R.A.',
       story: 'Depois de restaurar os arquivos e organizar o sistema, você finalmente consegue acessar uma área protegida.\nAli existe uma entidade desconhecida.\n\nAMEAÇA DETECTADA\nENTIDADE: C.O.N.T.R.A.\nNÍVEL DE AMEAÇA: CRÍTICO\nPROTOCOLO RECOMENDADO: ELIMINAÇÃO\n\nO acesso a ela está protegido por um Firewall. Para chegar até ela, será necessário enfraquecer a barreira, camada por camada.',
-      introMessage: 'Uma barreira. Bem-feita, aliás — alguém não queria que você chegasse até aqui. Classifique cada requisito: acerte e a camada é enfraquecida, erre e ela se estabiliza.',
+      introMessage: 'Uma barreira. Bem-feita, aliás — alguém não queria que você chegasse até aqui. Classifique cada requisito: acerte e a camada é enfraquecida, erre e ela se estabiliza. Cada pergunta pega fogo em 10 segundos — responda antes que o papel queime todo.',
       doneMessage: 'FIREWALL DESATIVADO. TODAS AS CAMADAS DE PROTEÇÃO FORAM REMOVIDAS. ACESSO AO C.O.N.T.R.A. LIBERADO.',
       options: ['Requisito Funcional', 'Requisito Não Funcional', 'Regra de Negócio'],
+      // Exclusivo desta fase: 10s por pergunta, mostrados como um papel
+      // pegando fogo em vez do cronômetro numérico de sempre — ver
+      // renderSequentialQuestions().
+      timePerQuestion: 10,
+      fireTimer: true,
       layers: [
         { label: 'CAMADA 1 — FIREWALL EXTERNO' },
         { label: 'CAMADA 2 — FIREWALL DE SEGURANÇA' },
@@ -2437,7 +2621,11 @@
     recordGameEnd({ won: false });
     setTimeout(() => {
       showScreen('screen-gameover');
-      runGameOverSequence(causeKey);
+      if ((DIFFICULTIES[State.difficulty] || {}).noStory) {
+        runQuickGameOver(causeKey);
+      } else {
+        runGameOverSequence(causeKey);
+      }
     }, 900);
   }
 
@@ -2622,15 +2810,15 @@
 
     // Em vez de rodar uma "Fase 5" jogável, o confronto final é
     // anunciado aqui mesmo, na tela de revelação: liberamos o modo
-    // secreto Impossível e avisamos que é lá que ele vai acontecer.
+    // secreto O Arquiteto e avisamos que é lá que ele vai acontecer.
     // Ver goToNextPhase() — depois desta cutscene o jogo vai direto
     // pra tela de vitória, sem passar por nenhuma "tela de fase final".
-    unlockImpossibleMode();
+    unlockArchitectMode();
     await new Promise((r) => setTimeout(r, 400));
     FX.glitchPulse($('.monitor-unit'));
     AudioEngine.staticBurst(0.45);
-    await addLine('🔓 MODO IMPOSSÍVEL LIBERADO', 'line-secret line-reveal-title', 24, 400);
-    await addLine('É lá que o confronto final contra O Arquiteto vai acontecer.', 'line-dim', 18, 350);
+    await addLine('🔓 O ARQUITETO LIBERADO', 'line-secret line-reveal-title', 24, 400);
+    await addLine('É lá que o confronto final contra ele vai acontecer.', 'line-dim', 18, 350);
     await new Promise((r) => setTimeout(r, 300));
     FX.glitchPulse($('.monitor-unit'));
     AudioEngine.staticBurst(0.3);
@@ -2809,9 +2997,9 @@
     const acronymMode = (tier === 'secret' || justBeatBoss) ? null : getAcronymMode();
 
     recordGameEnd({ won: true, score });
-    // Vencer na Difícil libera o modo secreto "Impossível" na tela de
-    // seleção de dificuldade (ver isImpossibleUnlocked/refreshDifficultyOptions).
-    if (State.difficulty === 'dificil') unlockImpossibleMode();
+    // Vencer na Difícil libera o modo secreto "O Arquiteto" na tela de
+    // seleção de dificuldade (ver isArchitectUnlocked/refreshDifficultyOptions).
+    if (State.difficulty === 'dificil') unlockArchitectMode();
 
     const titleEl = $('#victory-title');
     titleEl.textContent = ending.title;
@@ -2824,11 +3012,90 @@
     $('#v-integrity').textContent = `${State.integrity} / ${State.totalIntegritySegments}`;
     $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
     $('#v-score').textContent = String(score);
-    $('#v-name').value = loadSession()?.nickname || '';
+    autoSaveScore(score);
 
     showScreen('screen-victory');
     AudioEngine.success();
     runVictoryMonologue(ending, acronymMode);
+  }
+
+  // Etapa final da dificuldade Impossível: as 4 fases de sempre já
+  // acabaram, sem cutscene nenhuma — agora é O Arquiteto, o mesmo
+  // minigame de ritmo do modo secreto, só que com uma única vida (ver
+  // GuitarHero.open({ oneLife: true }) e markMissed()). Sem narrativa
+  // nenhuma aqui: nem intro, nem monólogo de vitória.
+  function startFinalRhythmGauntlet() {
+    stopGameLoops();
+    showScreen('screen-guitarhero');
+    GuitarHero.open({ oneLife: true, final: true, onFinalEnd: finishImpossibleRun });
+  }
+
+  // Fecha a dificuldade Impossível assim que a etapa de ritmo termina
+  // (venceu ou falhou) — direto pra tela de placar, sem monólogo, sem
+  // revelação, sem história: só os números da partida.
+  function finishImpossibleRun(rhythmStats) {
+    const { cause, score: rhythmScore, bestCombo, accuracy } = rhythmStats;
+    const won = cause === 'complete';
+    const { precision, score: baseScore } = computeScore();
+    const finalScore = baseScore + Math.round(rhythmScore / 2);
+    State.finalScoreOverride = finalScore;
+    recordGameEnd({ won, score: finalScore });
+
+    const titleEl = $('#victory-title');
+    titleEl.textContent = won ? 'IMPOSSÍVEL — VOCÊ SOBREVIVEU' : 'IMPOSSÍVEL — VOCÊ CAIU';
+    titleEl.className = 'victory-title' + (won ? '' : ' ending-dark');
+    $('#victory-sub').textContent = won
+      ? 'Quatro fases, uma vida, zero folga. Você concluiu a faixa inteira sem falhar uma vez.'
+      : 'Você chegou até O Arquiteto — mas com uma única vida, um erro basta.';
+    $('#victory-eerie').textContent = `Combo máximo no ritmo: ${bestCombo}x · Precisão no ritmo: ${accuracy}%`;
+
+    $('#v-time').textContent = formatTime(State.timeLeft);
+    $('#v-errors').textContent = String(State.mistakes);
+    $('#v-integrity').textContent = `${State.integrity} / ${State.totalIntegritySegments}`;
+    $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
+    $('#v-score').textContent = String(finalScore);
+    // Só registra no ranking se a etapa final foi vencida — cair pra
+    // ela não conta pontuação como um resultado "oficial" da corrida.
+    if (won) {
+      autoSaveScore(finalScore);
+    } else {
+      const statusEl = $('#score-save-status');
+      if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
+    }
+
+    showScreen('screen-victory');
+    AudioEngine.success();
+
+    stopVictoryAutoScroll();
+    const typedEl = $('#victory-typed');
+    const reveal = $('#victory-reveal');
+    typedEl.innerHTML = '';
+    typedEl.classList.add('no-scroll-pad');
+    reveal.hidden = false;
+    requestAnimationFrame(() => reveal.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  // Fim de jogo "seco" — só pra dificuldade Impossível: nada de sequência
+  // narrativa digitada, nada de lista de vítimas. Só a causa e o botão
+  // pra tentar de novo, na hora.
+  function runQuickGameOver(causeKey) {
+    const typedEl = $('#gameover-typed');
+    const victimsBlock = $('#victims-block');
+    const victimsList = $('#victims-list');
+    const finalEl = $('#gameover-final');
+    const restartBtn = $('#btn-restart');
+
+    victimsBlock.hidden = true;
+    victimsList.innerHTML = '';
+    const line = causeKey === 'time'
+      ? 'O tempo acabou antes da 4ª fase.'
+      : 'A integridade chegou a zero antes da 4ª fase.';
+    typedEl.innerHTML = '';
+    const p = document.createElement('p');
+    p.textContent = line;
+    typedEl.appendChild(p);
+    finalEl.textContent = 'IMPOSSÍVEL — tente de novo.';
+    restartBtn.hidden = false;
   }
 
   function loadRanking() {
@@ -2840,6 +3107,25 @@
     try { localStorage.setItem(RANKING_KEY, JSON.stringify(list)); } catch (e) {}
   }
 
+  // Mantém só o melhor registro de cada jogador POR dificuldade: se já
+  // existe uma entrada com o mesmo nome+dificuldade, ela só é
+  // substituída quando a pontuação nova é maior. Devolve `true` quando
+  // a lista foi alterada (registro novo ou recorde batido).
+  function upsertBestEntry(list, entry) {
+    const idx = list.findIndex((e) => e.difficulty === entry.difficulty
+      && (e.name || '').toLowerCase() === entry.name.toLowerCase());
+    if (idx === -1) { list.push(entry); return true; }
+    if (entry.score > list[idx].score) { list[idx] = entry; return true; }
+    return false;
+  }
+
+  function saveScoreIfBest(entry) {
+    const list = loadRanking();
+    const changed = upsertBestEntry(list, entry);
+    if (changed) saveRanking(list);
+    return changed;
+  }
+
   // -- Ranking global: busca e grava só a lista de pontuações no JSONBin,
   //    preservando as contas de usuário que estejam no mesmo bin. Se não
   //    estiver configurado (ou a rede falhar), cai pro ranking local.
@@ -2849,23 +3135,64 @@
     return Array.isArray(record.scores) ? record.scores : [];
   }
 
-  async function pushGlobalScore(entry) {
-    if (!JSONBIN_CONFIGURED) return false;
+  async function pushGlobalScoreIfBest(entry) {
+    if (!JSONBIN_CONFIGURED) return { configured: false, changed: false };
     const record = (await fetchBinRecord()) || {};
     const scores = Array.isArray(record.scores) ? record.scores : [];
-    const updated = [...scores, entry]
+    const changed = upsertBestEntry(scores, entry);
+    if (!changed) return { configured: true, changed: false };
+    const updated = scores
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_GLOBAL_ENTRIES);
-    return writeBinRecord({ ...record, scores: updated });
+    const ok = await writeBinRecord({ ...record, scores: updated });
+    return { configured: true, changed: ok };
+  }
+
+  // Salva a pontuação da partida automaticamente assim que o placar é
+  // revelado (sem botão manual, sem editar o apelido — usa sempre o
+  // apelido da conta logada). Só sobrescreve o registro existente do
+  // jogador NAQUELA dificuldade se a pontuação nova for maior que a
+  // salva antes; senão, o recorde antigo é mantido como está.
+  async function autoSaveScore(score) {
+    const statusEl = $('#score-save-status');
+    const session = loadSession();
+    const nickname = (session?.nickname || 'ANÔNIMO').toUpperCase();
+    const diffLabel = (DIFFICULTIES[State.difficulty] || {}).label || String(State.difficulty).toUpperCase();
+    const entry = { name: nickname, score, difficulty: State.difficulty, date: new Date().toISOString() };
+
+    if (statusEl) {
+      statusEl.className = 'victory-save-status status-pending';
+      statusEl.textContent = 'Salvando pontuação…';
+    }
+
+    const improvedLocal = saveScoreIfBest(entry);
+    const globalResult = await pushGlobalScoreIfBest(entry);
+
+    if (!statusEl) return;
+    statusEl.className = 'victory-save-status';
+    if (improvedLocal || globalResult.changed) {
+      statusEl.textContent = `Novo recorde salvo no ranking — ${diffLabel} (${nickname}).`;
+    } else {
+      statusEl.textContent = `Pontuação (${score}) não superou seu recorde salvo em ${diffLabel} — mantendo o melhor registrado.`;
+    }
   }
 
   let rankingCache = []; // última lista carregada (local ou global), pra filtrar sem refetch
+  // Dificuldade exibida no momento na tela de Ranking — cada dificuldade
+  // tem sua própria lista, separada por abas (ver renderRankingScreen).
+  let currentRankingDifficulty = 'facil';
 
   async function renderRankingScreen() {
     const tbody = $('#ranking-table-body');
     const noteEl = $('#ranking-source-note');
-    tbody.innerHTML = '<tr><td colspan="6" class="ranking-empty">Carregando…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="ranking-empty">Carregando…</td></tr>';
     if (noteEl) noteEl.textContent = '';
+
+    // Abre já na aba da dificuldade que acabou de ser jogada, se houver.
+    if (DIFFICULTIES[State.difficulty]) currentRankingDifficulty = State.difficulty;
+    $$('.ranking-diff-tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.difficulty === currentRankingDifficulty);
+    });
 
     let list;
     let isGlobal = false;
@@ -2884,32 +3211,31 @@
     renderRankingTable();
   }
 
-  // Aplica o filtro de dificuldade + pesquisa por nome sobre o cache já
+  // Aplica a aba de dificuldade + pesquisa por nome sobre o cache já
   // carregado (RF06 tabela / RF07 filtro-pesquisa), sem precisar refetch.
+  // Cada dificuldade é um ranking à parte — nunca mistura pontuações de
+  // dificuldades diferentes na mesma lista.
   function renderRankingTable() {
     const tbody = $('#ranking-table-body');
     const search = ($('#ranking-search')?.value || '').trim().toLowerCase();
-    const diffFilter = $('#ranking-filter-difficulty')?.value || 'all';
 
     const filtered = rankingCache.filter((entry) => {
       const matchesSearch = !search || entry.name.toLowerCase().includes(search);
-      const matchesDiff = diffFilter === 'all' || entry.difficulty === diffFilter;
+      const matchesDiff = entry.difficulty === currentRankingDifficulty;
       return matchesSearch && matchesDiff;
     }).slice(0, 25);
 
     tbody.innerHTML = '';
     if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="ranking-empty">Nenhum registro encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="ranking-empty">Nenhum registro encontrado.</td></tr>';
       return;
     }
     filtered.forEach((entry, i) => {
-      const diffLabel = DIFFICULTIES[entry.difficulty] ? DIFFICULTIES[entry.difficulty].label : 'MÉDIO';
       const dateLabel = entry.date ? new Date(entry.date).toLocaleDateString('pt-BR') : '—';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${i + 1}</td>
         <td>${entry.name}</td>
-        <td>${diffLabel}</td>
         <td>${entry.score} pts</td>
         <td>${dateLabel}</td>
         <td><span class="status-pill">SOBREVIVEU</span></td>
@@ -2952,6 +3278,13 @@
     let health = 100;
     let hits = 0;
     let keyHandler = null;
+    // Configuração da corrida atual (ver open()):
+    // - oneLife: qualquer nota perdida zera a vida na hora (dificuldade
+    //   Impossível, etapa final — ver markMissed()).
+    // - final: esta corrida é a etapa final da dificuldade Impossível, não
+    //   o modo secreto avulso — pula a tela de resultado própria (gh-result)
+    //   e devolve o resultado pro jogo principal via onFinalEnd().
+    let activeOpts = { oneLife: false, final: false, onFinalEnd: null };
 
     // Motivo original composto pra este minigame (0-3 = pista; -1 = pausa).
     // O andamento (eighth = colcheia) segue o BPM real e público da faixa.
@@ -2961,7 +3294,9 @@
       const phraseB = [1, -1, 2, 3, -1, 2, 1, -1, 0, -1, 1, 2, -1, 3, 2, -1];
       const notes = [];
       let t = 2.2; // contagem regressiva antes da 1ª nota
-      const repeats = 12;
+      // Fase do chefe: pelo menos o dobro do tamanho de antes (12 -> 24
+      // repetições da frase, ~2x a duração da faixa).
+      const repeats = 24;
       for (let r = 0; r < repeats; r++) {
         const phrase = (r % 4 === 3) ? phraseB : phraseA;
         phrase.forEach((lane) => {
@@ -3048,7 +3383,9 @@
     function markMissed(note) {
       note.missed = true;
       combo = 0;
-      health = clamp(health - MISS_PENALTY, 0, 100);
+      // Vida única (dificuldade Impossível): a primeira nota perdida já
+      // zera a vida, em vez de descontar aos poucos.
+      health = activeOpts.oneLife ? 0 : clamp(health - MISS_PENALTY, 0, 100);
       showFeedback('FALHOU', 'fb-miss');
       if (note.el) { note.el.classList.add('gh-note-missed'); removeNoteEl(note, 300); }
       updateHud();
@@ -3058,6 +3395,8 @@
     function loop() {
       if (!running) return;
       const elapsed = now() - startAt;
+
+      updateStageCorruption(clamp(elapsed / chart.duration, 0, 1));
 
       chart.notes.forEach((n) => {
         const spawnTime = n.time - TRAVEL_TIME;
@@ -3091,10 +3430,30 @@
       keyHandler = null;
     }
 
+    // Destruição progressiva do palco: quanto mais perto do fim da
+    // música, mais forte fica o glitch (ver classes gh-corrupt-1/2/3 no
+    // CSS). Só mexe no DOM quando o nível muda, não a cada frame.
+    let corruptionTier = -1;
+    function updateStageCorruption(progress) {
+      let tier = 0;
+      if (progress >= 0.85) tier = 3;
+      else if (progress >= 0.6) tier = 2;
+      else if (progress >= 0.3) tier = 1;
+      if (tier === corruptionTier) return;
+      corruptionTier = tier;
+      const stage = el('gh-stage');
+      if (!stage) return;
+      stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3');
+      if (tier > 0) stage.classList.add(`gh-corrupt-${tier}`);
+    }
+
     function resetVisuals() {
       const layer = el('gh-notes-layer');
       if (layer) layer.innerHTML = '';
       score = 0; combo = 0; bestCombo = 0; health = 100; hits = 0; ended = false;
+      corruptionTier = -1;
+      const stage = el('gh-stage');
+      if (stage) stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3');
       updateHud();
     }
 
@@ -3118,15 +3477,29 @@
 
       const totalNotes = chart.notes.length;
       const accuracy = totalNotes ? Math.round((hits / totalNotes) * 100) : 0;
+
+      // Etapa final da dificuldade Impossível: nada de tela de resultado
+      // própria aqui — o placar volta pro jogo principal, que mostra o
+      // resultado combinado (ver finishImpossibleRun em script principal).
+      if (activeOpts.final) {
+        if (cause === 'fail') { try { AudioEngine.error(); FX.glitchPulse(); } catch (e) {} }
+        else { try { AudioEngine.success(); } catch (e) {} }
+        if (typeof activeOpts.onFinalEnd === 'function') {
+          activeOpts.onFinalEnd({ cause, score, bestCombo, accuracy });
+        }
+        return;
+      }
+
       const titleEl = el('gh-result-title');
       const subEl = el('gh-result-sub');
       if (cause === 'fail') {
         titleEl.textContent = 'VOCÊ FALHOU A MÚSICA';
-        subEl.textContent = 'O modo Impossível não perdoa. Tente de novo.';
+        subEl.textContent = 'O Arquiteto não perdoa. Tente de novo.';
         try { AudioEngine.error(); FX.glitchPulse(); } catch (e) {}
       } else {
         titleEl.textContent = 'FAIXA CONCLUÍDA';
-        subEl.textContent = 'Você sobreviveu ao ritmo inteiro. Nada mal.';
+        subEl.textContent = 'Você sobreviveu ao ritmo inteiro. A dificuldade IMPOSSÍVEL foi liberada.';
+        unlockImpossibleMode();
         try { AudioEngine.success(); } catch (e) {}
       }
       el('gh-result-score').textContent = String(score);
@@ -3144,9 +3517,20 @@
       if (layer) layer.innerHTML = '';
     }
 
-    function open() {
+    function open(opts = {}) {
+      activeOpts = { oneLife: false, final: false, onFinalEnd: null, ...opts };
       resetVisuals();
       el('gh-result').hidden = true;
+      const introTitle = el('gh-intro-title');
+      const introText = el('gh-intro-text');
+      if (introTitle) {
+        introTitle.textContent = activeOpts.final ? 'O ARQUITETO — VIDA ÚNICA' : 'O ARQUITETO';
+      }
+      if (introText) {
+        introText.textContent = activeOpts.final
+          ? 'A etapa final do modo Impossível. Uma vida: a primeira nota perdida encerra a corrida.'
+          : 'Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.';
+      }
       el('gh-intro').hidden = false;
     }
 
@@ -3154,7 +3538,10 @@
       el('gh-start-btn').addEventListener('click', () => { try { AudioEngine.click(); } catch (e) {} startPlay(); });
       el('gh-intro-back-btn').addEventListener('click', () => {
         stopAndCleanup();
-        showScreen('screen-difficulty');
+        // Na etapa final do Impossível não existe "voltar pra tela de
+        // dificuldade" (a partida já está em andamento): sair aqui
+        // significa desistir da corrida.
+        showScreen(activeOpts.final ? 'screen-menu' : 'screen-difficulty');
       });
       el('gh-quit-btn').addEventListener('click', () => {
         stopAndCleanup();
@@ -3250,10 +3637,6 @@
       showScreen('screen-menu');
     });
 
-    // -- Ranking: filtro/pesquisa (RF07) --
-    $('#ranking-search').addEventListener('input', renderRankingTable);
-    $('#ranking-filter-difficulty').addEventListener('change', renderRankingTable);
-
     $('#btn-play').addEventListener('click', () => {
       AudioEngine.ensureCtx();
       refreshDifficultyOptions();
@@ -3290,14 +3673,21 @@
     $$('.difficulty-option').forEach((btn) => {
       btn.addEventListener('click', () => {
         State.pendingDifficulty = btn.dataset.difficulty;
-        // Modo secreto: nada de narrativa, nada de PC — vai direto pro
-        // palco em tela cheia do minigame de ritmo. A troca de tela e a
-        // abertura do minigame acontecem primeiro, sem depender de nada
-        // que possa falhar (ex. efeitos visuais); o flash é só um extra.
-        if (btn.dataset.difficulty === 'impossivel') {
+        // Modo secreto "O Arquiteto": nada de narrativa, nada de PC — vai
+        // direto pro palco em tela cheia do minigame de ritmo. A troca de
+        // tela e a abertura do minigame acontecem primeiro, sem depender
+        // de nada que possa falhar (ex. efeitos visuais); o flash é extra.
+        if (btn.dataset.difficulty === 'arquiteto') {
           showScreen('screen-guitarhero');
           GuitarHero.open();
           try { AudioEngine.click(); FX.whiteFlash(180); } catch (e) {}
+          return;
+        }
+        // Impossível também não tem história: pula a introdução narrativa
+        // (INTRO_LINES) e vai direto pro jogo — ver DIFFICULTIES.impossivel.
+        if (btn.dataset.difficulty === 'impossivel') {
+          AudioEngine.click();
+          beginGame();
           return;
         }
         AudioEngine.click();
@@ -3324,24 +3714,13 @@
       showScreen('screen-menu');
     });
 
-    $('#btn-save-score').addEventListener('click', async () => {
-      const nameInput = $('#v-name');
-      const btn = $('#btn-save-score');
-      const name = (nameInput.value.trim() || 'ANÔNIMO').slice(0, 16).toUpperCase();
-      const { score } = computeScore();
-      const entry = { name, score, difficulty: State.difficulty, date: new Date().toISOString() };
-
-      // Salva local imediatamente (sempre funciona, mesmo offline)
-      const list = loadRanking();
-      list.push(entry);
-      saveRanking(list);
-
-      nameInput.disabled = true;
-      btn.disabled = true;
-      btn.textContent = 'SALVANDO…';
-
-      const wentGlobal = await pushGlobalScore(entry);
-      btn.textContent = wentGlobal ? 'PONTUAÇÃO SALVA NO RANKING GLOBAL ✓' : 'PONTUAÇÃO SALVA (LOCAL) ✓';
+    $('#ranking-search').addEventListener('input', renderRankingTable);
+    $$('.ranking-diff-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        currentRankingDifficulty = tab.dataset.difficulty;
+        $$('.ranking-diff-tab').forEach((t) => t.classList.toggle('active', t === tab));
+        renderRankingTable();
+      });
     });
   }
 

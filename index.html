@@ -158,14 +158,14 @@
   <div class="panel-card ranking-card">
     <h2 class="panel-title">// SOBREVIVENTES</h2>
     <p class="ranking-source-note" id="ranking-source-note"></p>
+    <div class="ranking-diff-tabs" id="ranking-diff-tabs">
+      <button class="ranking-diff-tab active" data-difficulty="facil">FÁCIL</button>
+      <button class="ranking-diff-tab" data-difficulty="medio">MÉDIO</button>
+      <button class="ranking-diff-tab" data-difficulty="dificil">DIFÍCIL</button>
+      <button class="ranking-diff-tab" data-difficulty="impossivel">IMPOSSÍVEL</button>
+    </div>
     <div class="ranking-filters">
       <input type="text" id="ranking-search" class="ranking-search" placeholder="Pesquisar por nome…">
-      <select id="ranking-filter-difficulty" class="ranking-select">
-        <option value="all">Todas as dificuldades</option>
-        <option value="facil">FÁCIL</option>
-        <option value="medio">MÉDIO</option>
-        <option value="dificil">DIFÍCIL</option>
-      </select>
     </div>
     <div class="ranking-table-wrap">
       <table class="ranking-table">
@@ -173,14 +173,13 @@
           <tr>
             <th>#</th>
             <th>Nome</th>
-            <th>Dificuldade</th>
             <th>Pontuação</th>
             <th>Data</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody id="ranking-table-body">
-          <tr><td colspan="6" class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</td></tr>
+          <tr><td colspan="5" class="ranking-empty">Nenhum registro encontrado. Seja o primeiro a sair vivo.</td></tr>
         </tbody>
       </table>
     </div>
@@ -212,10 +211,15 @@
         <span class="difficulty-meta">7 segmentos de integridade</span>
         <span class="difficulty-desc">Pouco tempo, quase nenhuma margem. A sala racha rápido e cedo.</span>
       </button>
-      <button class="difficulty-option difficulty-impossible" data-difficulty="impossivel" id="diff-impossivel" hidden>
-        <span class="difficulty-name">IMPOSSÍVEL <span class="difficulty-tag">???</span></span>
+      <button class="difficulty-option difficulty-impossible" data-difficulty="arquiteto" id="diff-arquiteto" hidden>
+        <span class="difficulty-name">O ARQUITETO <span class="difficulty-tag">???</span></span>
         <span class="difficulty-meta">modo secreto desbloqueado</span>
         <span class="difficulty-desc">Esqueça requisitos, esqueça o PC. Só você, quatro teclas e a música.</span>
+      </button>
+      <button class="difficulty-option difficulty-impossible" data-difficulty="impossivel" id="diff-impossivel" hidden>
+        <span class="difficulty-name">IMPOSSÍVEL <span class="difficulty-tag">???</span></span>
+        <span class="difficulty-meta">1 segmento de integridade</span>
+        <span class="difficulty-desc">A Difícil inteira, sem uma linha de história — e no fim, O Arquiteto espera. Um erro, uma vida: sem segunda chance em nada.</span>
       </button>
     </div>
     <p class="difficulty-locked-hint" id="difficulty-locked-hint">Vença no modo DIFÍCIL para desbloquear algo... diferente.</p>
@@ -391,9 +395,8 @@
         <div class="stat-row stat-final"><span>Nota final</span><strong id="v-score"></strong></div>
       </div>
       <p class="victory-eerie" id="victory-eerie"></p>
-      <input type="text" id="v-name" maxlength="16" placeholder="SEU NOME PARA O RANKING">
+      <p class="victory-save-status" id="score-save-status"></p>
       <div class="victory-actions">
-        <button class="menu-btn" id="btn-save-score">SALVAR PONTUAÇÃO</button>
         <button class="menu-btn" id="btn-play-again">JOGAR NOVAMENTE</button>
       </div>
     </div>
@@ -401,13 +404,34 @@
 </section>
 
 <!-- ============================================================
-     TELA: MODO IMPOSSÍVEL — GUITAR HERO EM TELA CHEIA
-     Nada de PC, nada de fases de requisitos: reflexo puro.
+     TELA: O ARQUITETO — GUITAR HERO EM TELA CHEIA
+     Nada de PC, nada de fases de requisitos: reflexo puro. Reaproveitada
+     como etapa final (vida única) da dificuldade Impossível — ver
+     GuitarHero.open({ oneLife, final }) em script.js.
      Faixa "PERDEDOR" é uma composição instrumental 100% original,
      gerada e tocada ao vivo via Web Audio API (sem áudio externo).
      ============================================================ -->
 <section id="screen-guitarhero" class="screen gh-screen">
-  <div class="gh-stage">
+  <div class="gh-stage" id="gh-stage">
+
+    <!-- Tema tecnológico de fundo: grade de circuito animada, some por
+         trás de tudo (z-index mais baixo). Puramente decorativo. -->
+    <div class="gh-tech-bg" aria-hidden="true">
+      <div class="gh-tech-grid"></div>
+      <div class="gh-tech-circuit"></div>
+    </div>
+
+    <!-- Destruição progressiva: conforme a fase avança (ver
+         updateStageCorruption() em GuitarHero), o palco recebe as classes
+         gh-corrupt-1/2/3 e essas rachaduras + esse ruído vão ficando mais
+         fortes, como se o próprio Arquiteto estivesse rachando. -->
+    <div class="gh-crack-overlay" aria-hidden="true">
+      <div class="gh-crack gh-crack-a"></div>
+      <div class="gh-crack gh-crack-b"></div>
+      <div class="gh-crack gh-crack-c"></div>
+      <div class="gh-crack gh-crack-d"></div>
+    </div>
+    <div class="gh-noise-overlay" aria-hidden="true"></div>
 
     <div class="gh-hud">
       <div class="gh-hud-block gh-hud-left">
@@ -422,7 +446,7 @@
         <span class="gh-hud-label">COMBO</span>
         <span class="gh-hud-value" id="gh-combo">0x</span>
       </div>
-      <button class="gh-quit-btn" id="gh-quit-btn" aria-label="Sair do modo impossível">✕</button>
+      <button class="gh-quit-btn" id="gh-quit-btn" aria-label="Sair">✕</button>
     </div>
 
     <div class="gh-lanes" id="gh-lanes">
@@ -444,8 +468,8 @@
     </div>
 
     <div class="gh-overlay" id="gh-intro" hidden>
-      <h2 class="gh-overlay-title">MODO IMPOSSÍVEL</h2>
-      <p class="gh-overlay-text">Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.</p>
+      <h2 class="gh-overlay-title" id="gh-intro-title">O ARQUITETO</h2>
+      <p class="gh-overlay-text" id="gh-intro-text">Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.</p>
       <p class="gh-overlay-track">RITMO: 83 BPM, tom de Fá menor <span>(o andamento real de "Loser", Tame Impala — jogo 100% silencioso, sem áudio)</span></p>
       <div class="gh-overlay-keys">
         <span>D</span><span>F</span><span>J</span><span>K</span>
