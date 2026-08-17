@@ -147,6 +147,15 @@
       <p>Personagens originais: <strong>O Arquiteto</strong> — a inteligência corrompida que domina o sistema — e <strong>C.O.N.T.R.A.</strong>, a entidade que tentava impedi-lo.</p>
       <p>Desenvolvido inteiramente em HTML5, CSS3 e JavaScript puro, sem frameworks ou bibliotecas externas.</p>
     </div>
+
+    <!-- A Lista aparece aqui também: todo mundo que já derrotou O
+         Arquiteto no modo Impossível, carregada sempre que a tela de
+         créditos abre — ver renderCreditsHall() em script.js. -->
+    <div class="hall-of-fame" id="credits-hall">
+      <h3 class="hall-title">A LISTA — QUEM JÁ DERROTOU O ARQUITETO</h3>
+      <ol class="hall-list" id="credits-hall-list"></ol>
+    </div>
+
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
 </section>
@@ -162,12 +171,13 @@
       <button class="ranking-diff-tab active" data-difficulty="facil">FÁCIL</button>
       <button class="ranking-diff-tab" data-difficulty="medio">MÉDIO</button>
       <button class="ranking-diff-tab" data-difficulty="dificil">DIFÍCIL</button>
+      <button class="ranking-diff-tab" data-difficulty="arquiteto">O ARQUITETO</button>
       <button class="ranking-diff-tab" data-difficulty="impossivel">IMPOSSÍVEL</button>
     </div>
-    <div class="ranking-filters">
+    <div class="ranking-filters" id="ranking-filters">
       <input type="text" id="ranking-search" class="ranking-search" placeholder="Pesquisar por nome…">
     </div>
-    <div class="ranking-table-wrap">
+    <div class="ranking-table-wrap" id="ranking-table-wrap">
       <table class="ranking-table">
         <thead>
           <tr>
@@ -183,6 +193,23 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Modo Impossível não usa a tabela de pontuação normal: mostra só
+         o nº1 em destaque e o Salão da Fama (ordem de quem derrotou O
+         Arquiteto) — ver renderImpossibleRankingView() em script.js. -->
+    <div class="ranking-impossible-view" id="ranking-impossible-view" hidden>
+      <div class="ranking-champion" id="ranking-champion">
+        <span class="champion-crown">🏆</span>
+        <div class="champion-info">
+          <span class="champion-label">MELHOR JOGADOR</span>
+          <span class="champion-name" id="champion-name">—</span>
+          <span class="champion-score" id="champion-score"></span>
+        </div>
+      </div>
+      <h3 class="hall-title">A LISTA — ORDEM DE QUEDA DO ARQUITETO</h3>
+      <ol class="hall-list" id="ranking-hall-list"></ol>
+    </div>
+
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
 </section>
@@ -221,12 +248,34 @@
         <span class="difficulty-meta">1 segmento de integridade</span>
         <span class="difficulty-desc">A Difícil inteira, sem uma linha de história — e no fim, O Arquiteto espera. Um erro, uma vida: sem segunda chance em nada.</span>
       </button>
+
+      <!-- "A Lista" — quem já venceu o modo Impossível. Fica ao lado da
+           própria opção, some/aparece junto com ela (ver
+           refreshDifficultyOptions() em script.js). Abre como popup por
+           cima de tudo (mesmo padrão do caderno de anotações), sem
+           efeito de máquina de escrever aqui — isso só acontece na hora
+           em que alguém passa de verdade (ver revealImpossibleHallOfFame). -->
+      <button class="hall-toggle-btn" id="hall-toggle-btn" hidden aria-expanded="false">📜 A LISTA</button>
     </div>
     <p class="difficulty-locked-hint" id="difficulty-locked-hint">Vença no modo DIFÍCIL para desbloquear algo... diferente.</p>
 
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
 </section>
+
+<!-- Popup d'"A Lista" — abre por cima de tudo ao clicar em "📜 A LISTA"
+     na tela de dificuldade. Deixa claro que só entra aqui quem realmente
+     terminou o modo Impossível (não é ranking por pontuação). -->
+<div class="hall-modal-overlay" id="difficulty-hall-overlay" hidden>
+  <div class="hall-modal-panel">
+    <div class="hall-modal-header">
+      <h3 class="hall-title">A LISTA — QUEM JÁ DERROTOU O ARQUITETO</h3>
+      <button class="notebook-close" id="difficulty-hall-close-btn" aria-label="Fechar A Lista">✕</button>
+    </div>
+    <p class="hall-modal-note">Aqui só aparece quem conseguiu passar do Impossível — não é ranking por pontuação, é a ordem de quem chegou até o fim.</p>
+    <ol class="hall-list" id="difficulty-hall-list"></ol>
+  </div>
+</div>
 
 <!-- ============================================================
      TELA: INTRO NARRATIVA (TV antiga)
@@ -395,6 +444,16 @@
         <div class="stat-row stat-final"><span>Nota final</span><strong id="v-score"></strong></div>
       </div>
       <p class="victory-eerie" id="victory-eerie"></p>
+
+      <!-- Só aparece ao vencer o modo Impossível (derrotar O Arquiteto):
+           mostra A LISTA, "escrevendo" visualmente o nome de quem
+           acabou de passar caso ainda não esteja nela — nomes nunca se
+           repetem (ver revealImpossibleHallOfFame() em script.js). -->
+      <div class="hall-of-fame" id="impossible-hall" hidden>
+        <h3 class="hall-title">A LISTA — VOCÊ DERROTOU O ARQUITETO</h3>
+        <ol class="hall-list" id="hall-list"></ol>
+      </div>
+
       <p class="victory-save-status" id="score-save-status"></p>
       <div class="victory-actions">
         <button class="menu-btn" id="btn-play-again">JOGAR NOVAMENTE</button>
@@ -408,8 +467,12 @@
      Nada de PC, nada de fases de requisitos: reflexo puro. Reaproveitada
      como etapa final (vida única) da dificuldade Impossível — ver
      GuitarHero.open({ oneLife, final }) em script.js.
-     Faixa "PERDEDOR" é uma composição instrumental 100% original,
-     gerada e tocada ao vivo via Web Audio API (sem áudio externo).
+     Faixa "NÚCLEO EM COLAPSO" é uma composição original de verdade,
+     gravada em assets/sounds/ e tocada por um <audio> comum (sem
+     depender de servidor) — ver BossMusic em script.js. O chart de
+     notas, os patamares de destruição do palco e a queda final de O
+     Arquiteto foram todos remapeados em cima da forma de onda real
+     dessa faixa.
      ============================================================ -->
 <section id="screen-guitarhero" class="screen gh-screen">
   <div class="gh-stage" id="gh-stage">
@@ -439,8 +502,9 @@
         <span class="gh-hud-value" id="gh-score">0</span>
       </div>
       <div class="gh-hud-block gh-hud-mid">
-        <span class="gh-track-name">RITMO: 83 BPM · Fá menor — tempo de "Loser" (Tame Impala)</span>
+        <span class="gh-track-name">"NÚCLEO EM COLAPSO" — 172 BPM · Dó# menor (trilha original)</span>
         <div class="gh-health-track"><div class="gh-health-fill" id="gh-health-fill"></div></div>
+        <span class="gh-core-readout" id="gh-core-readout">NÚCLEO DO ARQUITETO: <span id="gh-core-value">100</span>%</span>
       </div>
       <div class="gh-hud-block gh-hud-right">
         <span class="gh-hud-label">COMBO</span>
@@ -470,7 +534,7 @@
     <div class="gh-overlay" id="gh-intro" hidden>
       <h2 class="gh-overlay-title" id="gh-intro-title">O ARQUITETO</h2>
       <p class="gh-overlay-text" id="gh-intro-text">Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.</p>
-      <p class="gh-overlay-track">RITMO: 83 BPM, tom de Fá menor <span>(o andamento real de "Loser", Tame Impala — jogo 100% silencioso, sem áudio)</span></p>
+      <p class="gh-overlay-track">"NÚCLEO EM COLAPSO" — 172 BPM, tom de Dó# menor <span>(trilha original composta para este confronto — o chart de notas e a destruição do palco seguem o ritmo real da faixa)</span></p>
       <div class="gh-overlay-keys">
         <span>D</span><span>F</span><span>J</span><span>K</span>
       </div>
@@ -486,6 +550,7 @@
         <div class="stat-row"><span>Maior combo</span><strong id="gh-result-combo"></strong></div>
         <div class="stat-row"><span>Precisão</span><strong id="gh-result-acc"></strong></div>
       </div>
+      <p class="victory-save-status" id="gh-save-status"></p>
       <button class="menu-btn" id="gh-result-retry-btn">↺ TOCAR DE NOVO</button>
       <button class="menu-btn gh-overlay-back" id="gh-result-menu-btn">VOLTAR AO MENU</button>
     </div>

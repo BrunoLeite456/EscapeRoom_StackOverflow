@@ -186,6 +186,130 @@
     return { click, success, error, staticBurst, alarm, metalDoor, startAmbient, stopAmbient, setMuted, ensureCtx };
   })();
 
+/* ------------------------------------------------------------------
+     2b. "NÚCLEO EM COLAPSO" — trilha original do confronto final com
+        O Arquiteto (tela GuitarHero). Faixa real, composta e gravada
+        especificamente para este projeto (arquivo em
+        assets/sounds/nucleo-em-colapso.*) — não é mais sintetizada ao
+        vivo. Andamento e tonalidade reais, detectados por análise de
+        áudio: ~172 BPM, tom de Dó# menor.
+        Tocada com um <audio> comum (não passa pelo grafo do Web Audio
+        API), o que evita problemas de CORS ao abrir o jogo direto do
+        disco (file://) sem servidor. O andamento visual da fase
+        inteira — o chart de notas, os patamares de corrupção do palco
+        e a queda final de O Arquiteto — foi remapeado em cima da
+        forma de onda real desta faixa (ver CHART_NOTES/BEAT_GRID/
+        TIER_BOUNDS logo abaixo e updateStageCorruption() em
+        GuitarHero): o próprio arquivo já "acalma" sozinho nos
+        segundos finais, então o interlúdio melancólico da queda do
+        Arquiteto é a cauda real da música, não mais um trecho
+        sintetizado à parte.
+     ------------------------------------------------------------------ */
+  const BossMusic = (() => {
+    const SRC_M4A = 'assets/sounds/nucleo-em-colapso.m4a';
+    const SRC_MP3 = 'assets/sounds/nucleo-em-colapso.mp3';
+    const BASE_VOLUME = 0.82;
+
+    let audioEl = null;
+    let fadeTimer = null;
+
+    function pickSupportedSrc(a) {
+      // Prefere M4A/AAC (melhor qualidade); cai pro MP3 se o navegador
+      // não souber tocar M4A (ex.: alguns Firefox/Linux antigos).
+      const canM4a = a.canPlayType && (a.canPlayType('audio/mp4; codecs="mp4a.40.2"') || a.canPlayType('audio/x-m4a'));
+      return canM4a ? SRC_M4A : SRC_MP3;
+    }
+
+    function ensureAudio() {
+      if (audioEl) return audioEl;
+      audioEl = new Audio();
+      audioEl.preload = 'auto';
+      audioEl.src = pickSupportedSrc(audioEl);
+      audioEl.volume = BASE_VOLUME;
+      return audioEl;
+    }
+
+    function clearFade() {
+      if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+    }
+
+    // Começa a faixa do zero. Chamado a partir de um clique do jogador
+    // (botão "TOCAR"), então a política de autoplay com som do navegador
+    // não bloqueia.
+    function start() {
+      const a = ensureAudio();
+      clearFade();
+      try { a.pause(); } catch (e) {}
+      a.currentTime = 0;
+      a.volume = BASE_VOLUME;
+      const p = a.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+
+    // Posição real de reprodução (s) — fonte da verdade pra sincronizar
+    // notas, patamares de corrupção e pulsos de destruição com o áudio
+    // de verdade, em vez de um timer separado que poderia dessincronizar.
+    function getTime() {
+      return audioEl ? audioEl.currentTime : 0;
+    }
+
+    function isPlaying() {
+      return !!audioEl && !audioEl.paused && !audioEl.ended;
+    }
+
+    // O volume sobe um pouco a cada patamar — sutil de propósito, já
+    // que a intensidade real vem da própria faixa (ela já fica mais
+    // pesada sozinha conforme avança).
+    function setTier(t) {
+      if (!audioEl) return;
+      audioEl.volume = clamp(BASE_VOLUME + t * 0.035, 0, 1);
+    }
+
+    // `hard`: corta na hora (jogador falhou a música). Caso contrário,
+    // fade curto pra não cortar seco quando o jogador sai por escolha.
+    function stop(hard = false) {
+      if (!audioEl) return;
+      clearFade();
+      if (hard) {
+        try { audioEl.pause(); } catch (e) {}
+        return;
+      }
+      let v = audioEl.volume;
+      fadeTimer = setInterval(() => {
+        v -= 0.08;
+        if (v <= 0 || !audioEl) {
+          if (audioEl) { audioEl.volume = 0; try { audioEl.pause(); } catch (e) {} }
+          clearFade();
+        } else if (audioEl) {
+          audioEl.volume = v;
+        }
+      }, 70);
+    }
+
+    return { start, stop, setTier, getTime, isPlaying };
+  })();
+
+  // ------------------------------------------------------------------
+  // 2c. Mapeamento rítmico do confronto — gerado offline a partir da
+  //     forma de onda real de "Núcleo em Colapso" (batidas + conteúdo
+  //     de frequência por batida via análise de áudio offline; ver
+  //     nota no README). Substitui o gerador algorítmico de frases que
+  //     existia aqui antes.
+  //     - BEAT_GRID: todas as batidas detectadas na faixa inteira —
+  //       usada só pros pulsos de destruição contínuos (ver
+  //       updateBeatPulse em GuitarHero), não pro chart jogável.
+  //     - CHART_NOTES: [tempo(s), raia(0-3)] — as notas que realmente
+  //       caem no jogo, já filtradas/balanceadas por raia.
+  //     - TIER_BOUNDS: em segundos reais da faixa, os 4 patamares de
+  //       corrupção do palco batem com a energia real da música (fica
+  //       calma no início, sobe por patamares, e o 4º é o trecho mais
+  //       pesado antes do colapso final).
+  // ------------------------------------------------------------------
+  const BEAT_GRID = [7.361,7.709,8.057,8.406,8.754,9.102,9.451,9.776,10.101,10.449,10.797,11.169,11.517,11.865,12.214,12.562,12.91,13.259,13.607,13.955,14.303,14.675,15.023,15.348,15.72,16.068,16.393,16.742,17.067,17.415,17.81,18.204,18.553,18.924,19.249,19.621,19.969,20.317,20.666,21.06,21.432,21.757,22.105,22.454,22.802,23.15,23.499,23.87,24.218,24.59,24.961,25.31,25.658,26.006,26.378,26.726,27.074,27.423,27.771,28.119,28.468,28.816,29.141,29.489,29.838,30.186,30.534,30.883,31.231,31.579,31.927,32.276,32.624,32.972,33.321,33.669,34.017,34.366,34.737,35.109,35.457,35.805,36.177,36.525,36.873,37.222,37.593,37.941,38.266,38.615,38.986,39.335,39.683,40.031,40.403,40.751,41.099,41.448,41.796,42.167,42.539,42.864,43.189,43.537,43.886,44.234,44.582,44.931,45.279,45.627,45.952,46.301,46.626,46.951,47.299,47.647,47.996,48.321,48.692,49.017,49.389,49.737,50.085,50.434,50.805,51.154,51.502,51.85,52.198,52.547,52.895,53.243,53.615,53.963,54.311,54.66,55.008,55.356,55.728,56.076,56.424,56.796,57.144,57.493,57.841,58.189,58.561,58.909,59.257,59.606,59.954,60.302,60.674,61.022,61.37,61.719,62.067,62.415,62.787,63.135,63.483,63.832,64.18,64.551,64.9,65.248,65.596,65.968,66.316,66.664,67.013,67.361,67.733,68.081,68.429,68.778,69.126,69.497,69.846,70.194,70.542,70.891,71.262,71.61,71.959,72.307,72.655,73.027,73.375,73.723,74.072,74.42,74.768,75.14,75.488,75.836,76.185,76.533,76.904,77.253,77.601,77.949,78.321,78.669,79.018,79.366,79.737,80.086,80.434,80.782,81.131,81.479,81.827,82.175,82.547,82.918,83.267,83.615,83.963,84.312,84.66,85.008,85.38,85.728,86.076,86.425,86.773,87.144,87.493,87.841,88.189,88.538,88.886,89.234,89.606,89.954,90.302,90.651,90.999,91.371,91.719,92.067,92.415,92.787,93.135,93.484,93.855,94.203,94.575,94.923,95.271,95.62,95.968,96.316,96.665,97.013,97.361,97.71,98.081,98.429,98.801,99.149,99.498,99.846,100.194,100.542,100.914,101.262,101.611,101.959,102.307,102.655,103.004,103.352,103.724,104.072,104.42,104.768,105.117,105.465,105.837,106.185,106.533,106.881,107.253,107.601,107.95,108.298,108.669,109.018,109.366,109.738,110.086,110.411,110.782,111.131,111.502,111.851,112.199,112.547,112.895,113.267,113.615,113.94,114.312,114.66,115.008,115.357,115.705,116.077,116.425,116.773,117.145,117.493,117.841,118.19,118.561,118.909,119.258,119.606,119.954,120.326,120.674,121.022,121.371,121.719,122.067,122.416,122.787,123.135,123.484,123.832,124.204,124.552,124.9,125.248,125.597,125.968,126.317,126.665,127.013,127.361,127.71,128.058,128.43,128.778,129.126,129.474,129.846,130.194,130.543,130.891,131.262,131.611,131.959,132.307,132.656,133.004,133.352,133.724,134.072,134.42,134.769,135.117,135.488,135.837,136.185,136.533,136.882,137.253,137.601,137.95,138.298,138.646,139.018,139.366,139.738,140.086,140.434,140.759,141.131,141.479,141.827,142.199,142.547,142.896,143.244,143.615,143.964,144.312,144.66,145.009,145.38,145.728,146.077,146.425,146.797,147.145,147.493,147.841,148.19,148.538,148.91,149.258,149.606,149.954,150.303,150.651,151.023,151.371,151.719,152.067,152.416,152.787,153.136,153.484,153.832,154.204,154.552,154.9,155.249,155.597,155.945,156.294,156.665,157.013,157.362,157.71,158.081,158.43,158.778,159.126,159.498,159.846,160.194,160.543,160.891,161.239,161.588,161.959,162.307,162.679,163.004,163.352,163.724,164.072,164.42,164.769,165.14,165.489,165.837,166.185,166.534,166.882,167.253,167.602,167.95,168.298,168.67,169.018,169.366,169.738,170.109,170.458,170.829,171.201,171.549,171.897,172.246,172.594,172.942,173.291,173.639,173.987,174.335,174.684,175.032,175.38,175.752,176.123,176.495,176.866,177.168,177.54,177.888,178.236,178.585,178.933,179.281,179.583,179.908,180.233,180.558,180.883,181.209,181.534,181.882,182.23,182.579,182.904,183.252,183.6,183.948,184.297,184.645,184.993,185.342,185.69,186.038,186.387,186.735,187.083];
+  const CHART_NOTES = [[7.709,1],[8.406,3],[9.102,3],[9.776,2],[10.449,1],[11.169,0],[11.865,3],[12.562,3],[13.259,0],[13.955,2],[14.675,1],[15.348,2],[16.068,3],[16.742,2],[17.415,0],[18.204,0],[18.924,0],[19.621,3],[20.317,0],[20.666,0],[21.06,1],[21.432,3],[21.757,0],[22.105,3],[22.454,0],[22.802,3],[23.15,1],[23.499,3],[23.87,2],[24.218,2],[24.59,3],[24.961,2],[25.31,2],[25.658,3],[26.006,1],[26.378,3],[26.726,1],[27.074,3],[27.423,3],[27.771,0],[28.119,0],[28.468,1],[28.816,1],[29.141,0],[29.489,3],[29.838,1],[30.186,3],[30.534,0],[30.883,3],[31.231,2],[31.579,0],[31.927,0],[32.276,0],[32.624,0],[32.972,2],[33.321,1],[33.669,3],[34.017,2],[34.366,0],[34.737,3],[35.109,2],[35.457,3],[35.805,2],[36.177,0],[36.525,1],[36.873,1],[37.222,3],[37.593,3],[37.941,3],[38.266,1],[38.615,1],[38.986,2],[39.335,0],[39.683,3],[40.031,1],[40.403,2],[40.751,1],[41.099,0],[41.448,2],[41.796,1],[42.167,1],[42.539,0],[42.864,3],[43.189,2],[43.537,0],[43.886,3],[44.234,1],[44.582,0],[44.931,2],[45.279,1],[45.627,3],[45.952,3],[46.301,0],[46.626,0],[46.951,2],[47.299,0],[47.647,0],[47.996,3],[48.321,0],[48.692,1],[49.017,3],[49.389,0],[49.737,0],[50.085,2],[50.434,3],[50.805,1],[51.154,2],[51.502,0],[51.85,0],[52.198,3],[52.547,0],[52.895,0],[53.243,2],[53.615,1],[53.963,0],[54.311,0],[54.66,3],[55.008,0],[55.356,1],[55.728,2],[56.076,0],[56.424,0],[56.796,3],[57.144,1],[57.493,3],[57.841,1],[58.189,1],[58.561,2],[58.909,2],[59.257,0],[59.606,2],[59.954,0],[60.302,0],[60.674,1],[61.022,3],[61.37,3],[61.719,2],[62.067,0],[62.415,2],[62.787,0],[63.135,1],[63.483,3],[63.832,1],[64.18,1],[64.551,0],[64.9,2],[65.248,1],[65.596,2],[65.968,0],[66.316,3],[66.664,3],[67.013,2],[67.361,2],[67.733,2],[68.081,1],[68.429,0],[68.778,3],[69.126,3],[69.497,1],[69.846,3],[70.194,2],[70.542,2],[70.891,3],[71.262,3],[71.61,0],[71.959,0],[72.307,2],[72.655,2],[73.027,1],[73.375,0],[73.723,3],[74.072,0],[74.42,0],[74.768,1],[75.14,1],[75.488,3],[75.836,2],[76.185,1],[76.533,1],[76.904,1],[77.253,0],[77.601,1],[77.949,1],[78.321,3],[78.669,0],[79.018,3],[79.366,3],[79.737,2],[80.086,2],[80.434,0],[80.782,0],[81.131,1],[81.479,0],[81.827,3],[82.175,2],[82.547,0],[82.918,3],[83.267,0],[83.615,1],[83.963,0],[84.312,3],[84.66,2],[85.008,2],[85.38,0],[85.728,0],[86.076,1],[86.425,3],[86.773,2],[87.144,3],[87.493,3],[87.841,1],[88.189,3],[88.538,1],[88.886,1],[89.234,3],[89.606,3],[89.954,2],[90.302,0],[90.651,0],[90.999,2],[91.371,3],[91.719,3],[92.067,0],[92.415,2],[92.787,2],[93.135,3],[93.484,3],[93.855,1],[94.203,3],[94.575,3],[94.923,0],[95.271,3],[95.62,0],[95.968,2],[96.316,2],[96.665,0],[97.013,1],[97.361,2],[97.71,1],[98.081,3],[98.429,2],[98.801,3],[99.149,3],[99.498,0],[99.846,2],[100.194,2],[100.542,3],[100.914,2],[101.262,1],[101.611,2],[101.959,2],[102.307,1],[102.655,0],[103.004,2],[103.352,2],[103.724,3],[104.072,0],[104.42,2],[104.768,3],[105.117,0],[105.465,0],[105.837,2],[106.185,2],[106.533,0],[106.881,2],[107.253,0],[107.601,2],[107.95,3],[108.298,3],[108.669,1],[109.018,3],[109.366,1],[109.738,1],[110.086,2],[110.411,0],[110.782,3],[111.131,0],[111.502,2],[111.851,1],[112.199,3],[112.547,3],[112.895,2],[113.267,1],[113.615,1],[113.94,3],[114.312,1],[114.66,1],[115.008,3],[115.357,1],[115.705,3],[116.077,0],[116.425,3],[116.773,2],[117.145,0],[117.493,1],[117.841,3],[118.19,2],[118.561,1],[118.909,0],[119.258,2],[119.606,3],[119.954,0],[120.326,2],[120.674,1],[121.022,3],[121.371,3],[121.719,2],[122.067,3],[122.253,1],[122.416,3],[122.787,1],[123.135,0],[123.484,2],[123.832,3],[124.204,0],[124.552,3],[124.9,3],[125.248,0],[125.597,0],[125.968,0],[126.317,2],[126.479,2],[126.665,0],[126.851,1],[127.013,3],[127.199,1],[127.361,3],[127.524,2],[127.71,0],[128.058,3],[128.43,2],[128.778,2],[129.126,3],[129.312,0],[129.474,1],[129.846,0],[130.194,0],[130.543,3],[130.891,3],[131.262,1],[131.425,3],[131.611,1],[131.959,1],[132.145,0],[132.307,0],[132.516,1],[132.656,2],[133.004,0],[133.19,1],[133.352,3],[133.538,3],[133.724,0],[134.072,2],[134.42,2],[134.769,1],[135.117,2],[135.488,1],[135.837,1],[136.185,1],[136.533,2],[136.882,3],[137.253,0],[137.601,1],[137.95,0],[138.298,3],[138.484,0],[138.646,3],[138.809,2],[139.018,2],[139.18,0],[139.366,2],[139.738,1],[140.086,1],[140.434,1],[140.759,3],[140.968,0],[141.131,3],[141.317,1],[141.479,3],[141.827,2],[142.199,3],[142.547,1],[142.896,2],[143.244,2],[143.453,1],[143.615,2],[143.964,3],[144.312,1],[144.475,2],[144.66,2],[144.846,3],[145.009,3],[145.38,0],[145.728,0],[146.077,3],[146.262,1],[146.425,3],[146.797,3],[147.145,0],[147.493,2],[147.841,2],[148.19,3],[148.538,2],[148.91,2],[149.258,1],[149.444,3],[149.606,3],[149.954,2],[150.303,2],[150.651,1],[151.023,2],[151.371,2],[151.719,2],[152.067,0],[152.416,1],[152.787,3],[153.136,2],[153.484,0],[153.832,0],[154.204,3],[154.552,0],[154.738,0],[154.9,1],[155.086,0],[155.249,3],[155.597,1],[155.783,1],[155.945,0],[156.131,3],[156.294,0],[156.665,3],[157.013,2],[157.362,1],[157.71,3],[158.081,2],[158.43,1],[158.778,3],[159.126,2],[159.498,3],[159.846,3],[160.194,1],[160.543,3],[160.891,1],[161.077,1],[161.239,3],[161.402,3],[161.588,3],[161.959,1],[162.307,1],[162.679,3],[163.004,2],[163.352,1],[163.724,2],[164.072,0],[164.42,1],[164.769,3],[165.14,1],[165.489,3],[165.837,1],[166.185,2],[166.534,0],[166.882,3],[167.253,3],[167.602,2],[167.95,3],[168.298,3],[168.67,0],[169.018,3],[169.366,2]];
+  const TIER_BOUNDS = [20.0, 60.0, 120.0, 155.0, 169.5];
+
+
   /* ------------------------------------------------------------------
      3. EFEITOS VISUAIS
      ------------------------------------------------------------------ */
@@ -305,9 +429,40 @@
       }
     }
 
+    // -- Linha de "erro de sistema" que aparece por cima de tudo e some
+    //    sozinha. Usada pra mostrar o Arquiteto quebrando aos poucos. --
+    function errorPopup(container, text) {
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'error-glitch-line';
+      el.textContent = text;
+      el.style.left = `${rand(4, 62)}%`;
+      el.style.top = `${rand(6, 82)}%`;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 1450);
+    }
+
+    // -- Punhado de glifos corrompidos que sobem e se desfazem — o
+    //    "bug" visual que mostra dano acumulando no Arquiteto. --
+    const BUG_GLYPHS = ['0', '1', '#', '?', '%', 'X', '/', '\\', '¬', '¦', 'Æ', '§'];
+    function bugSwarmBurst(container, count = 4) {
+      if (!container) return;
+      for (let i = 0; i < count; i++) {
+        const g = document.createElement('span');
+        g.className = 'bug-glyph';
+        g.textContent = BUG_GLYPHS[randInt(0, BUG_GLYPHS.length - 1)];
+        g.style.left = `${rand(2, 96)}%`;
+        g.style.top = `${rand(30, 90)}%`;
+        g.style.animationDuration = `${rand(0.6, 1.3)}s`;
+        container.appendChild(g);
+        setTimeout(() => g.remove(), 1400);
+      }
+    }
+
     return {
       startNoiseLoop, stopNoiseLoop, startMonitorNoiseLoop, stopMonitorNoiseLoop,
       shake, glitchPulse, whiteFlash, blackout, setCorruptionLevel, spawnParticles,
+      errorPopup, bugSwarmBurst,
     };
   })();
 
@@ -367,8 +522,16 @@
     const architectBtn = $('#diff-arquiteto');
     const impossibleBtn = $('#diff-impossivel');
     const hint = $('#difficulty-locked-hint');
+    const hallToggleBtn = $('#hall-toggle-btn');
+    const hallOverlay = $('#difficulty-hall-overlay');
     if (architectBtn) architectBtn.hidden = !architectUnlocked;
     if (impossibleBtn) impossibleBtn.hidden = !impossibleUnlocked;
+    if (hallToggleBtn) hallToggleBtn.hidden = !impossibleUnlocked;
+    // Fecha o popup e força recarregar na próxima abertura — evita
+    // mostrar uma versão desatualizada d'A Lista depois de uma partida.
+    if (hallOverlay) hallOverlay.hidden = true;
+    if (hallToggleBtn) hallToggleBtn.setAttribute('aria-expanded', 'false');
+    difficultyHallLoaded = false;
     if (hint) {
       if (!architectUnlocked) {
         hint.hidden = false;
@@ -429,7 +592,10 @@
     State.bossRevealShown = false;
     State.finalScoreOverride = null;
     document.body.classList.remove('firewall-active');
+    document.body.classList.remove('architect-collapsing');
     fireTimerMode = false;
+    if ($('#impossible-hall')) $('#impossible-hall').hidden = true;
+    if ($('#hall-list')) $('#hall-list').innerHTML = '';
     // A lista de fases da partida é montada aqui: o chefão (Fase 5, "O
     // Arquiteto") só entra no fluxo quando a dificuldade escolhida libera
     // (hoje, só a Difícil). Ver getActivePhases().
@@ -1437,14 +1603,29 @@
          acerto acende uma luz da sala.
      Ver runRhythmStage() — motor genérico reaproveitado pelas 3 etapas.
      ------------------------------------------------------------------ */
-  function renderBossHUD(container, playerHP, architectHP) {
+  // Nível de "quebra" visual do Arquiteto conforme a vida dele cai —
+  // 0 (inteiro) a 3 (quase destruído). Usado tanto no HUD quanto pra
+  // decidir a intensidade dos efeitos de dano (glitch, bugs, popups).
+  function architectTierFor(hp) {
+    if (hp <= 15) return 3;
+    if (hp <= 45) return 2;
+    if (hp <= 75) return 1;
+    return 0;
+  }
+
+  function renderBossHUD(container, playerHP, architectHP, faults = 0) {
     container.innerHTML = '';
+    const tier = architectTierFor(architectHP);
     const hud = document.createElement('div');
-    hud.className = 'boss-hud';
+    hud.className = `boss-hud arch-tier-${tier}`;
     hud.innerHTML = `
       <div class="boss-bar-row">
         <span class="boss-bar-label">O ARQUITETO</span>
-        <div class="boss-bar"><div class="boss-bar-fill boss-bar-architect" style="width:${clamp(architectHP, 0, 100)}%"></div></div>
+        <div class="boss-bar boss-bar-arch-wrap"><div class="boss-bar-fill boss-bar-architect" style="width:${clamp(architectHP, 0, 100)}%"></div></div>
+      </div>
+      <div class="boss-readout-row">
+        <span class="boss-readout arch-readout" data-tier="${tier}">INTEGRIDADE DO NÚCLEO: ${clamp(Math.round(architectHP), 0, 100)}%</span>
+        <span class="boss-readout boss-faults">FALHAS DETECTADAS: ${faults}</span>
       </div>
       <div class="boss-bar-row">
         <span class="boss-bar-label">VOCÊ</span>
@@ -1649,21 +1830,103 @@
     };
   }
 
+  // Mensagens de "bug" que aparecem crescendo em gravidade conforme o
+  // Arquiteto perde integridade — puramente cosmético, reforça a
+  // sensação de que o confronto está sendo vencido aos poucos.
+  const ARCHITECT_BUG_MESSAGES = {
+    1: [
+      'AVISO: padrão de resposta não reconhecido',
+      'core.architect — latência anormal',
+      'checksum divergente em módulo 0x1A',
+      'reconectando ao núcleo…',
+    ],
+    2: [
+      'ERRO: ponteiro nulo em core.architect',
+      'ARQUITETO.SYS — falha de segmentação',
+      'firewall interno: derrubado',
+      'log corrompido: ??????',
+      'STACK OVERFLOW — camada 0x3F',
+    ],
+    3: [
+      'INTEGRIDADE CRÍTICA — reiniciando subsistema',
+      'ARQUITETO.exe parou de responder',
+      'núcleo instável — contenção falhando',
+      'ERRO FATAL: 0xA3F9DEAD',
+      'identidade do processo corrompida',
+    ],
+    4: [
+      'COLAPSO IMINENTE — núcleo abaixo de 15%',
+      'ARQUITETO.SYS — TODAS AS CAMADAS FALHANDO',
+      'contenção perdida — sem reversão possível',
+      'ÚLTIMO AVISO: desligamento em progresso',
+      'nada mais para segurar isto junto',
+    ],
+  };
+
+  // Mensagens exclusivas do instante em que O Arquiteto cai de vez
+  // (faixa final de GuitarHero concluída com sucesso) — reforçam o
+  // colapso total em vez de só mais um patamar de dano.
+  const ARCHITECT_FINAL_MESSAGES = [
+    'SISTEMA — DESLIGANDO',
+    'NÚCLEO: 0%',
+    'ARQUITETO — PROCESSO FINALIZADO',
+    'conexão perdida — encerrando…',
+    'nenhuma resposta do núcleo',
+  ];
+
   function renderBossPhase(root, phase, onAllDone) {
-    const boss = { playerHP: 100, architectHP: 100 };
+    const boss = { playerHP: 100, architectHP: 100, faults: 0 };
     root.innerHTML = '';
     const hudWrap = document.createElement('div');
     hudWrap.className = 'boss-hud-wrap';
     const stageRoot = document.createElement('div');
     stageRoot.className = 'boss-stage-root';
+    const fxLayer = document.createElement('div');
+    fxLayer.className = 'boss-fx-layer';
     root.appendChild(hudWrap);
     root.appendChild(stageRoot);
-    renderBossHUD(hudWrap, boss.playerHP, boss.architectHP);
+    root.appendChild(fxLayer);
+    renderBossHUD(hudWrap, boss.playerHP, boss.architectHP, boss.faults);
+
+    let lastTier = 0;
+
+    // Reação visual/sonora escalada a cada acerto contra o Arquiteto —
+    // quanto mais baixa a integridade dele, mais "quebrado" tudo fica:
+    // mais glifos de bug, popups de erro mais graves e tremor maior.
+    function reactToArchitectDamage() {
+      boss.faults += 1;
+      const tier = architectTierFor(boss.architectHP);
+      FX.glitchPulse($('.monitor-unit'));
+      FX.bugSwarmBurst(fxLayer, 2 + tier * 2);
+      if (Math.random() < 0.5 + tier * 0.15) {
+        const pool = ARCHITECT_BUG_MESSAGES[Math.max(tier, 1)];
+        FX.errorPopup(fxLayer, pool[randInt(0, pool.length - 1)]);
+      }
+      if (tier > lastTier) {
+        // acabou de cruzar um novo patamar de dano — reação maior,
+        // como se o sistema do Arquiteto estivesse de fato cedendo.
+        lastTier = tier;
+        FX.shake($('.monitor-unit'));
+        FX.glitchPulse();
+        AudioEngine.staticBurst(0.35);
+        FX.bugSwarmBurst(fxLayer, 6 + tier * 2);
+        const pool = ARCHITECT_BUG_MESSAGES[Math.max(tier, 1)];
+        FX.errorPopup(fxLayer, pool[randInt(0, pool.length - 1)]);
+        if (tier >= 3) document.body.classList.add('architect-collapsing');
+      } else if (Math.random() < 0.3) {
+        AudioEngine.staticBurst(0.18);
+      }
+    }
 
     function damage(target, amount) {
-      if (target === 'architect') boss.architectHP = clamp(boss.architectHP - amount, 0, 100);
-      else boss.playerHP = clamp(boss.playerHP - amount, 0, 100);
-      renderBossHUD(hudWrap, boss.playerHP, boss.architectHP);
+      if (target === 'architect') {
+        boss.architectHP = clamp(boss.architectHP - amount, 0, 100);
+        renderBossHUD(hudWrap, boss.playerHP, boss.architectHP, boss.faults);
+        reactToArchitectDamage();
+      } else {
+        boss.playerHP = clamp(boss.playerHP - amount, 0, 100);
+        renderBossHUD(hudWrap, boss.playerHP, boss.architectHP, boss.faults);
+      }
     }
     // ---------------- ETAPA 1 — 2 raias, ritmo de aprendizado ----------------
     function runStage1() {
@@ -1695,6 +1958,7 @@
           FX.glitchPulse($('.monitor-unit'));
           AudioEngine.staticBurst(0.3);
           if (randInt(0, 1) === 1) FX.shake($('.monitor-unit'));
+          if (Math.random() < 0.4) FX.bugSwarmBurst(fxLayer, 2);
         },
       }, runStage3);
     }
@@ -1722,8 +1986,13 @@
         lanes, notes, damage,
         fallMs: 2500, spawnGapMs: 1300, toleranceMs: 480,
         perHit: 100 / notes.length,
-        onResolve: (resolvedCount) => {
+        onResolve: (resolvedCount, total) => {
           $$('.boss-light', lightsRow).forEach((l, i) => l.classList.toggle('lit', i < resolvedCount));
+          // Reta final: cada luz acesa é mais um sinal visível de que o
+          // Arquiteto está perdendo terreno.
+          if (resolvedCount > 0 && resolvedCount < total) {
+            FX.bugSwarmBurst(fxLayer, 3);
+          }
         },
       }, finishBoss);
     }
@@ -1732,6 +2001,7 @@
       FX.whiteFlash(400);
       AudioEngine.metalDoor();
       setArchitectMessage(phase.stage3.doneMessage || phase.doneMessage);
+      document.body.classList.remove('architect-collapsing');
       setTimeout(onAllDone, 1600);
     }
 
@@ -1913,6 +2183,7 @@
     $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
     $('#v-score').textContent = String(score);
     autoSaveScore(score);
+    if ($('#impossible-hall')) $('#impossible-hall').hidden = true;
 
     stopVictoryAutoScroll();
     const typedEl = $('#victory-typed');
@@ -2241,11 +2512,13 @@
   const SESSION_KEY = 'arquiteto_session_v1';
   const STATS_KEY = 'arquiteto_stats_v1';
   const USERS_KEY = 'arquiteto_users_v1'; // cache local de contas (cadastro/login)
+  const HALL_KEY = 'arquiteto_impossible_hall_v1'; // Salão da Fama do modo Impossível
 
   // -------------------------------------------------------------------
   // JSONBin.io — mesma configuração usada pelo ranking global. O bin
-  // guarda um único objeto JSON com duas listas: "scores" (ranking) e
-  // "users" (contas de cadastro/login), então dá pra usar as duas
+  // guarda um único objeto JSON com três listas: "scores" (ranking),
+  // "users" (contas de cadastro/login) e "impossibleHall" (Salão da
+  // Fama de quem derrotou O Arquiteto), então dá pra usar as três
   // funcionalidades com a mesma conta/chave. Veja README.md.
   // -------------------------------------------------------------------
   const JSONBIN_BIN_ID = '6a750f93f5f4af5e29f4f49a';
@@ -3013,6 +3286,7 @@
     $('#v-precision').textContent = `${Math.round(precision * 100)}%`;
     $('#v-score').textContent = String(score);
     autoSaveScore(score);
+    if ($('#impossible-hall')) $('#impossible-hall').hidden = true;
 
     showScreen('screen-victory');
     AudioEngine.success();
@@ -3058,9 +3332,13 @@
     // ela não conta pontuação como um resultado "oficial" da corrida.
     if (won) {
       autoSaveScore(finalScore);
+      const session = loadSession();
+      revealImpossibleHallOfFame((session?.nickname || 'ANÔNIMO').toUpperCase());
     } else {
       const statusEl = $('#score-save-status');
       if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
+      const hallEl = $('#impossible-hall');
+      if (hallEl) hallEl.hidden = true;
     }
 
     showScreen('screen-victory');
@@ -3153,8 +3431,11 @@
   // apelido da conta logada). Só sobrescreve o registro existente do
   // jogador NAQUELA dificuldade se a pontuação nova for maior que a
   // salva antes; senão, o recorde antigo é mantido como está.
-  async function autoSaveScore(score) {
-    const statusEl = $('#score-save-status');
+  // `statusSelector` deixa reaproveitar a mesma função em telas
+  // diferentes (vitória normal vs. resultado do minigame de ritmo
+  // avulso "O Arquiteto", que usa sua própria tela de resultado).
+  async function autoSaveScore(score, statusSelector = '#score-save-status') {
+    const statusEl = $(statusSelector);
     const session = loadSession();
     const nickname = (session?.nickname || 'ANÔNIMO').toUpperCase();
     const diffLabel = (DIFFICULTIES[State.difficulty] || {}).label || String(State.difficulty).toUpperCase();
@@ -3178,9 +3459,85 @@
   }
 
   let rankingCache = []; // última lista carregada (local ou global), pra filtrar sem refetch
+  let hallCache = [];    // Salão da Fama do modo Impossível (ordem de quem derrotou O Arquiteto)
   // Dificuldade exibida no momento na tela de Ranking — cada dificuldade
   // tem sua própria lista, separada por abas (ver renderRankingScreen).
   let currentRankingDifficulty = 'facil';
+
+  // ---------------------------------------------------------------------
+  // SALÃO DA FAMA — modo Impossível. Diferente do ranking por pontuação
+  // das outras dificuldades, aqui o que importa é a ORDEM em que cada
+  // jogador derrotou O Arquiteto pela primeira vez — não a pontuação.
+  // Cada nome aparece só uma vez (nunca repete), na posição em que
+  // completou o modo pela primeira vez.
+  // ---------------------------------------------------------------------
+  function loadHall() {
+    try { return JSON.parse(localStorage.getItem(HALL_KEY)) || []; } catch (e) { return []; }
+  }
+  function saveHall(list) {
+    try { localStorage.setItem(HALL_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+  async function fetchGlobalHall() {
+    const record = await fetchBinRecord();
+    if (!record) return null;
+    return Array.isArray(record.impossibleHall) ? record.impossibleHall : [];
+  }
+
+  // Adiciona `name` à lista só se ele ainda não estiver nela (comparação
+  // sem diferenciar maiúsc./minúsc.). Devolve a lista (nova, se mudou) e
+  // se foi uma adição nova, pra decidir se "escreve" o nome na hora ou só
+  // mostra a lista como já estava.
+  function addToHall(list, name) {
+    const idx = list.findIndex((e) => (e.name || '').toLowerCase() === name.toLowerCase());
+    if (idx !== -1) return { list, isNew: false, position: idx + 1 };
+    const updated = [...list, { name, date: new Date().toISOString() }];
+    return { list: updated, isNew: true, position: updated.length };
+  }
+
+  // Registra `name` no Salão da Fama — local sempre (funciona offline) e
+  // no ranking global também, se configurado. Devolve a lista final e se
+  // essa chamada acabou de adicionar um nome novo (pra "escrever" ele).
+  async function registerHallOfFame(name) {
+    const localResult = addToHall(loadHall(), name);
+    if (localResult.isNew) saveHall(localResult.list);
+
+    if (!JSONBIN_CONFIGURED) return localResult;
+
+    const record = (await fetchBinRecord()) || {};
+    const globalList = Array.isArray(record.impossibleHall) ? record.impossibleHall : [];
+    const globalResult = addToHall(globalList, name);
+    if (globalResult.isNew) await writeBinRecord({ ...record, impossibleHall: globalResult.list });
+    return globalResult;
+  }
+
+  // Mostra o Salão da Fama na tela de vitória do modo Impossível: os
+  // nomes que já estavam lá aparecem direto, e — só se esse jogador
+  // acabou de entrar pela primeira vez — o nome dele é "escrito" com
+  // efeito de máquina de escrever ao final da lista.
+  async function revealImpossibleHallOfFame(nickname) {
+    const wrap = $('#impossible-hall');
+    const listEl = $('#hall-list');
+    if (!wrap || !listEl) return;
+    wrap.hidden = false;
+    listEl.innerHTML = '';
+
+    const result = await registerHallOfFame(nickname);
+    const entries = result.list;
+    const newIdx = result.isNew ? entries.length - 1 : -1;
+
+    for (let i = 0; i < entries.length; i++) {
+      const li = document.createElement('li');
+      li.className = 'hall-entry';
+      listEl.appendChild(li);
+      if (i === newIdx) {
+        li.classList.add('hall-entry-new');
+        await typeText(li, entries[i].name, 55);
+      } else {
+        li.textContent = entries[i].name;
+        if (i === result.position - 1 && !result.isNew) li.classList.add('hall-entry-mine');
+      }
+    }
+  }
 
   async function renderRankingScreen() {
     const tbody = $('#ranking-table-body');
@@ -3201,8 +3558,12 @@
       if (global) { list = global; isGlobal = true; }
     }
     if (!list) list = loadRanking();
-
     rankingCache = [...list].sort((a, b) => b.score - a.score);
+
+    let hall = null;
+    if (JSONBIN_CONFIGURED) hall = await fetchGlobalHall();
+    hallCache = hall || loadHall();
+
     if (noteEl) {
       noteEl.textContent = isGlobal
         ? 'ranking global — todo mundo que jogou aparece aqui'
@@ -3211,11 +3572,101 @@
     renderRankingTable();
   }
 
+  // Modo Impossível não usa a tabela de pontuação normal: mostra só o
+  // nº1 (maior pontuação) em destaque como "melhor jogador", e o Salão
+  // da Fama — a lista, na ordem em que cada jogador derrotou O
+  // Arquiteto pela primeira vez, sem nomes repetidos.
+  // Preenche uma <ol> com as entradas d'A Lista, sem efeito de máquina
+  // de escrever (isso é exclusivo do instante em que alguém acaba de
+  // passar — ver revealImpossibleHallOfFame). Destaca o nome do
+  // jogador logado, se ele já estiver na lista.
+  function renderHallEntries(listEl, entries, emptyMessage) {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!entries || entries.length === 0) {
+      listEl.innerHTML = `<li class="ranking-empty">${emptyMessage}</li>`;
+      return;
+    }
+    const session = loadSession();
+    const myName = (session?.nickname || '').toLowerCase();
+    entries.forEach((entry) => {
+      const li = document.createElement('li');
+      li.className = 'hall-entry';
+      li.textContent = entry.name;
+      if (myName && entry.name.toLowerCase() === myName) li.classList.add('hall-entry-mine');
+      listEl.appendChild(li);
+    });
+  }
+
+  function renderImpossibleRankingView() {
+    const champion = rankingCache.find((e) => e.difficulty === 'impossivel');
+    const nameEl = $('#champion-name');
+    const scoreEl = $('#champion-score');
+    if (nameEl) nameEl.textContent = champion ? champion.name : 'Ninguém ainda';
+    if (scoreEl) scoreEl.textContent = champion ? `${champion.score} pts` : '';
+    renderHallEntries($('#ranking-hall-list'), hallCache, 'Ninguém derrotou O Arquiteto ainda.');
+  }
+
+  // Carrega A Lista (global se configurado, senão local) uma vez e
+  // devolve as entradas — usado tanto pelo painel da tela de
+  // dificuldade quanto pela tela de créditos.
+  async function loadHallEntries() {
+    if (JSONBIN_CONFIGURED) {
+      const global = await fetchGlobalHall();
+      if (global) return global;
+    }
+    return loadHall();
+  }
+
+  // Popup "A Lista" ao lado da opção Impossível — abre por cima de tudo
+  // (mesmo padrão do caderno de anotações), carregando as entradas na
+  // primeira vez que abre.
+  let difficultyHallLoaded = false;
+  async function openDifficultyHallModal() {
+    const overlay = $('#difficulty-hall-overlay');
+    const btn = $('#hall-toggle-btn');
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    if (!difficultyHallLoaded) {
+      difficultyHallLoaded = true;
+      const entries = await loadHallEntries();
+      renderHallEntries($('#difficulty-hall-list'), entries, 'Ninguém derrotou O Arquiteto ainda. Seja o primeiro.');
+    }
+  }
+  function closeDifficultyHallModal() {
+    const overlay = $('#difficulty-hall-overlay');
+    const btn = $('#hall-toggle-btn');
+    if (overlay) overlay.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  // A Lista também aparece nos créditos, sempre atualizada ao abrir a tela.
+  async function renderCreditsHall() {
+    const entries = await loadHallEntries();
+    renderHallEntries($('#credits-hall-list'), entries, 'Ninguém derrotou O Arquiteto ainda. Seja o primeiro.');
+  }
+
   // Aplica a aba de dificuldade + pesquisa por nome sobre o cache já
   // carregado (RF06 tabela / RF07 filtro-pesquisa), sem precisar refetch.
   // Cada dificuldade é um ranking à parte — nunca mistura pontuações de
   // dificuldades diferentes na mesma lista.
   function renderRankingTable() {
+    const tableWrap = $('#ranking-table-wrap');
+    const filtersWrap = $('#ranking-filters');
+    const impossibleView = $('#ranking-impossible-view');
+
+    if (currentRankingDifficulty === 'impossivel') {
+      if (tableWrap) tableWrap.hidden = true;
+      if (filtersWrap) filtersWrap.hidden = true;
+      if (impossibleView) impossibleView.hidden = false;
+      renderImpossibleRankingView();
+      return;
+    }
+    if (tableWrap) tableWrap.hidden = false;
+    if (filtersWrap) filtersWrap.hidden = false;
+    if (impossibleView) impossibleView.hidden = true;
+
     const tbody = $('#ranking-table-body');
     const search = ($('#ranking-search')?.value || '').trim().toLowerCase();
 
@@ -3246,16 +3697,15 @@
 
   /* ------------------------------------------------------------------
      11b. MODO IMPOSSÍVEL — GUITAR HERO EM TELA CHEIA
-     Minigame de ritmo independente do motor de fases, sem servidor e
-     sem nenhum arquivo de áudio. Este modo NÃO toca nenhum som/música:
-     é só o desafio visual (notas caindo) cronometrado no relógio do
-     navegador (performance.now()), sem depender de Web Audio.
-     O ritmo do "chart" (quando cada nota cai) é calcado no andamento
-     real e público da música "Loser" — 83 BPM, tom de Fá menor —
-     que são dados factuais (tempo/tonalidade), não a gravação, a
-     melodia ou a letra da música, que não são reproduzidas em nenhum
-     momento. O padrão de notas em si (qual pista cada nota usa) é um
-     motivo original, gerado algoritmicamente pra este jogo.
+     Minigame de ritmo independente do motor de fases, tocando a faixa
+     real "Núcleo em Colapso" (ver BossMusic acima) através de um
+     <audio> comum — sem passar pelo grafo do Web Audio API, então
+     funciona igual com o jogo aberto direto do disco (file://) ou por
+     um servidor local. O relógio da partida é a própria posição de
+     reprodução do áudio (BossMusic.getTime()), não um timer separado:
+     isso garante que as notas, os patamares de corrupção do palco e
+     os pulsos de destruição fiquem sempre grudados no som de verdade,
+     sem dessincronizar com o tempo.
      ------------------------------------------------------------------ */
   const GuitarHero = (() => {
     const LANE_KEYS = ['d', 'f', 'j', 'k'];
@@ -3265,10 +3715,10 @@
     const TRAVEL_TIME = 1.55;     // segundos que a nota leva do topo até a linha de acerto
     const MISS_PENALTY = 12;
     const HIT_REGEN = 2;
-    const BPM = 83; // andamento real e público da música-tema (dado factual, não protegido por direito autoral)
+    const BPM = 172; // andamento real de "Núcleo em Colapso", detectado por análise de áudio
 
     let chart = null;
-    let startAt = 0;       // performance.now() (em segundos) em que a partida começa de fato
+    let lastBeatIdx = -1;   // índice da última batida do BEAT_GRID já processada (ver updateBeatPulse)
     let rafId = null;
     let running = false;
     let ended = false;
@@ -3278,6 +3728,7 @@
     let health = 100;
     let hits = 0;
     let keyHandler = null;
+    let fxLayerEl = null; // camada de popups de erro + glifos de bug por cima do palco
     // Configuração da corrida atual (ver open()):
     // - oneLife: qualquer nota perdida zera a vida na hora (dificuldade
     //   Impossível, etapa final — ver markMissed()).
@@ -3286,28 +3737,18 @@
     //   e devolve o resultado pro jogo principal via onFinalEnd().
     let activeOpts = { oneLife: false, final: false, onFinalEnd: null };
 
-    // Motivo original composto pra este minigame (0-3 = pista; -1 = pausa).
-    // O andamento (eighth = colcheia) segue o BPM real e público da faixa.
+    // Chart real, mapeado em cima da forma de onda de "Núcleo em
+    // Colapso" (ver CHART_NOTES logo acima, gerado offline por análise
+    // de áudio — batidas reais da faixa + banda de frequência dominante
+    // em cada uma, pra decidir a raia). Nada de fórmula gerada na hora:
+    // é a música de verdade ditando o ritmo do combate.
     function generateChart() {
-      const eighth = 60 / BPM / 2;
-      const phraseA = [0, -1, 1, 0, -1, 2, 1, -1, 3, -1, 2, 1, -1, 0, 1, -1];
-      const phraseB = [1, -1, 2, 3, -1, 2, 1, -1, 0, -1, 1, 2, -1, 3, 2, -1];
-      const notes = [];
-      let t = 2.2; // contagem regressiva antes da 1ª nota
-      // Fase do chefe: pelo menos o dobro do tamanho de antes (12 -> 24
-      // repetições da frase, ~2x a duração da faixa).
-      const repeats = 24;
-      for (let r = 0; r < repeats; r++) {
-        const phrase = (r % 4 === 3) ? phraseB : phraseA;
-        phrase.forEach((lane) => {
-          if (lane >= 0) notes.push({ time: t, lane, hit: false, missed: false, el: null, spawned: false });
-          t += eighth;
-        });
-      }
-      return { notes, duration: t };
+      const notes = CHART_NOTES.map(([time, lane]) => ({
+        time, lane, hit: false, missed: false, el: null, spawned: false,
+      }));
+      const lastTime = notes.length ? notes[notes.length - 1].time : 0;
+      return { notes, duration: Math.max(lastTime, TIER_BOUNDS[TIER_BOUNDS.length - 1]) };
     }
-
-    function now() { return performance.now() / 1000; }
 
     function el(sel) { return document.getElementById(sel); }
 
@@ -3359,7 +3800,7 @@
     function tryHit(lane) {
       if (!running) return;
       flashKey(lane);
-      const elapsed = now() - startAt;
+      const elapsed = BossMusic.getTime();
       let best = null;
       let bestDiff = Infinity;
       chart.notes.forEach((n) => {
@@ -3394,9 +3835,10 @@
 
     function loop() {
       if (!running) return;
-      const elapsed = now() - startAt;
+      const elapsed = BossMusic.getTime();
 
-      updateStageCorruption(clamp(elapsed / chart.duration, 0, 1));
+      updateStageCorruption(elapsed);
+      updateBeatPulse(elapsed);
 
       chart.notes.forEach((n) => {
         const spawnTime = n.time - TRAVEL_TIME;
@@ -3430,21 +3872,125 @@
       keyHandler = null;
     }
 
-    // Destruição progressiva do palco: quanto mais perto do fim da
-    // música, mais forte fica o glitch (ver classes gh-corrupt-1/2/3 no
-    // CSS). Só mexe no DOM quando o nível muda, não a cada frame.
+    // Destruição progressiva do palco: mapeada em cima dos patamares de
+    // energia REAIS de "Núcleo em Colapso" (TIER_BOUNDS, em segundos —
+    // ver comentário acima de BEAT_GRID/CHART_NOTES). Quanto mais perto
+    // do clímax real da faixa, mais forte fica o glitch (classes
+    // gh-corrupt-1..4 no CSS) e mais pesada fica a trilha (ver
+    // BossMusic.setTier). Ao subir de patamar, uma rajada de "bugs" e
+    // um popup de erro aparecem — sinal visível de que O Arquiteto está
+    // perdendo terreno. Ver também updateBeatPulse(), que soma
+    // destruição contínua em cima disso, batida a batida.
     let corruptionTier = -1;
-    function updateStageCorruption(progress) {
-      let tier = 0;
-      if (progress >= 0.85) tier = 3;
-      else if (progress >= 0.6) tier = 2;
-      else if (progress >= 0.3) tier = 1;
+    function ensureFxLayer() {
+      if (fxLayerEl && fxLayerEl.isConnected) return fxLayerEl;
+      const stage = el('gh-stage');
+      if (!stage) return null;
+      fxLayerEl = document.createElement('div');
+      fxLayerEl.className = 'boss-fx-layer';
+      stage.appendChild(fxLayerEl);
+      return fxLayerEl;
+    }
+
+    function tierForElapsed(elapsed) {
+      if (elapsed >= TIER_BOUNDS[3]) return 4;
+      if (elapsed >= TIER_BOUNDS[2]) return 3;
+      if (elapsed >= TIER_BOUNDS[1]) return 2;
+      if (elapsed >= TIER_BOUNDS[0]) return 1;
+      return 0;
+    }
+
+    function updateStageCorruption(elapsed) {
+      const tier = tierForElapsed(elapsed);
+      BossMusic.setTier(tier);
+      const coreEl = el('gh-core-value');
+      if (coreEl) {
+        const climaxEnd = TIER_BOUNDS[TIER_BOUNDS.length - 1];
+        const pct = clamp(Math.round((1 - elapsed / climaxEnd) * 100), 0, 100);
+        if (coreEl.textContent !== String(pct)) coreEl.textContent = String(pct);
+      }
       if (tier === corruptionTier) return;
+      const risingTier = tier > corruptionTier;
       corruptionTier = tier;
       const stage = el('gh-stage');
       if (!stage) return;
-      stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3');
+      stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3', 'gh-corrupt-4');
       if (tier > 0) stage.classList.add(`gh-corrupt-${tier}`);
+      const coreReadout = el('gh-core-readout');
+      if (coreReadout) {
+        coreReadout.classList.toggle('core-critical', tier >= 2);
+      }
+      if (risingTier && tier > 0) {
+        const layer = ensureFxLayer();
+        FX.bugSwarmBurst(layer, 3 + tier * 2);
+        const pool = ARCHITECT_BUG_MESSAGES[tier] || ARCHITECT_BUG_MESSAGES[3];
+        FX.errorPopup(layer, pool[randInt(0, pool.length - 1)]);
+        AudioEngine.staticBurst(0.22);
+        stage.classList.remove('gh-invert-flash');
+        void stage.offsetWidth;
+        stage.classList.add('gh-invert-flash');
+        setTimeout(() => stage.classList.remove('gh-invert-flash'), 160);
+        if (tier >= 2) {
+          stage.classList.remove('shake');
+          void stage.offsetWidth;
+          stage.classList.add('shake');
+          setTimeout(() => stage.classList.remove('shake'), 420);
+        }
+        if (tier >= 4) {
+          // reta final antes do colapso: rajada dupla, o Arquiteto está
+          // por um fio.
+          setTimeout(() => FX.errorPopup(layer, pool[randInt(0, pool.length - 1)]), 260);
+          try { AudioEngine.alarm(); } catch (e) {}
+        }
+      }
+    }
+
+    // Destruição contínua, batida a batida — não só nas transições de
+    // patamar. Consome BEAT_GRID (todas as batidas reais da faixa) e
+    // dispara efeitos crescentes conforme o patamar atual: um pulso
+    // discreto no palco a cada batida, e progressivamente mais bugs,
+    // flicker cromático e tremor nas batidas fortes (a cada 4ª), até o
+    // caos quase contínuo do patamar 4 — a tela literalmente se
+    // desfazendo no ritmo da música.
+    function onBeat(beatIdx) {
+      if (!running || corruptionTier <= 0) return;
+      const stage = el('gh-stage');
+      if (!stage) return;
+      const tier = corruptionTier;
+      const isDownbeat = beatIdx % 4 === 0;
+
+      stage.classList.remove('gh-beat-pulse');
+      void stage.offsetWidth;
+      stage.classList.add('gh-beat-pulse');
+      setTimeout(() => stage.classList.remove('gh-beat-pulse'), 130);
+
+      if (tier >= 2 && (isDownbeat || tier >= 3)) {
+        const layer = ensureFxLayer();
+        FX.bugSwarmBurst(layer, tier >= 4 ? 3 : 1);
+      }
+      if (tier >= 3 && isDownbeat) {
+        stage.classList.remove('gh-chroma-flicker');
+        void stage.offsetWidth;
+        stage.classList.add('gh-chroma-flicker');
+        setTimeout(() => stage.classList.remove('gh-chroma-flicker'), 180);
+      }
+      if (tier >= 4) {
+        if (isDownbeat) {
+          stage.classList.remove('shake');
+          void stage.offsetWidth;
+          stage.classList.add('shake');
+          setTimeout(() => stage.classList.remove('shake'), 360);
+        }
+        try { AudioEngine.staticBurst(0.1); } catch (e) {}
+      }
+    }
+
+    function updateBeatPulse(elapsed) {
+      if (!BEAT_GRID || !BEAT_GRID.length) return;
+      while (lastBeatIdx + 1 < BEAT_GRID.length && BEAT_GRID[lastBeatIdx + 1] <= elapsed) {
+        lastBeatIdx += 1;
+        onBeat(lastBeatIdx);
+      }
     }
 
     function resetVisuals() {
@@ -3452,20 +3998,68 @@
       if (layer) layer.innerHTML = '';
       score = 0; combo = 0; bestCombo = 0; health = 100; hits = 0; ended = false;
       corruptionTier = -1;
+      lastBeatIdx = -1;
       const stage = el('gh-stage');
-      if (stage) stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3');
+      if (stage) stage.classList.remove('gh-corrupt-1', 'gh-corrupt-2', 'gh-corrupt-3', 'gh-corrupt-4', 'gh-collapsed', 'gh-invert-flash', 'gh-beat-pulse', 'gh-chroma-flicker', 'shake');
+      if (fxLayerEl) fxLayerEl.innerHTML = '';
+      const coreEl = el('gh-core-value');
+      if (coreEl) coreEl.textContent = '100';
+      const coreReadout = el('gh-core-readout');
+      if (coreReadout) coreReadout.classList.remove('core-critical');
+      const statusEl = el('gh-save-status');
+      if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
       updateHud();
     }
 
     function startPlay() {
       resetVisuals();
+      ensureFxLayer();
       el('gh-intro').hidden = true;
       el('gh-result').hidden = true;
       chart = generateChart();
-      startAt = now() + 0.15;
       attachKeys();
       running = true;
       rafId = requestAnimationFrame(loop);
+      BossMusic.start();
+    }
+
+    // Sequência de colapso final — só quando a faixa é vencida de
+    // verdade (cause === 'complete'): tremores em cascata, mais bugs
+    // na tela, bem mais intensa que qualquer patamar anterior. A
+    // trilha NÃO é cortada aqui: nesse ponto exato o arquivo real já
+    // está entrando sozinho no seu trecho mais quieto (é o interlúdio
+    // melancólico de verdade, não mais sintetizado à parte) — ela só
+    // continua tocando por baixo do colapso e da tela de resultado,
+    // e termina/pausa naturalmente quando a faixa acaba.
+    function triggerFinalCollapse(callback) {
+      const stage = el('gh-stage');
+      const layer = ensureFxLayer();
+      try { FX.whiteFlash(420); AudioEngine.metalDoor(); } catch (e) {}
+      if (stage) stage.classList.add('gh-collapsed');
+      FX.bugSwarmBurst(layer, 26);
+      ARCHITECT_FINAL_MESSAGES.forEach((msg, i) => {
+        setTimeout(() => FX.errorPopup(layer, msg), 150 + i * 240);
+      });
+      let stutters = 0;
+      const stutterInterval = setInterval(() => {
+        if (stage) {
+          stage.classList.remove('shake');
+          void stage.offsetWidth;
+          stage.classList.add('shake');
+        }
+        try { AudioEngine.staticBurst(0.25); } catch (e) {}
+        if (stutters % 2 === 0) FX.bugSwarmBurst(layer, 5);
+        stutters += 1;
+        if (stutters >= 5) {
+          clearInterval(stutterInterval);
+          if (stage) stage.classList.remove('shake');
+        }
+      }, 260);
+      setTimeout(() => { if (typeof callback === 'function') callback(); }, 2000);
+      // Deixa o interlúdio real tocar por baixo do resultado por um
+      // tempo, depois esmaece sozinho — sem cortar o momento, mas sem
+      // tocar pra sempre caso o jogador fique parado na tela final.
+      setTimeout(() => { BossMusic.stop(); }, 13000);
     }
 
     function endRun(cause) {
@@ -3478,34 +4072,56 @@
       const totalNotes = chart.notes.length;
       const accuracy = totalNotes ? Math.round((hits / totalNotes) * 100) : 0;
 
+      if (cause === 'fail') { BossMusic.stop(true); } // corte seco — sem outro
+
       // Etapa final da dificuldade Impossível: nada de tela de resultado
       // própria aqui — o placar volta pro jogo principal, que mostra o
       // resultado combinado (ver finishImpossibleRun em script principal).
       if (activeOpts.final) {
-        if (cause === 'fail') { try { AudioEngine.error(); FX.glitchPulse(); } catch (e) {} }
-        else { try { AudioEngine.success(); } catch (e) {} }
-        if (typeof activeOpts.onFinalEnd === 'function') {
-          activeOpts.onFinalEnd({ cause, score, bestCombo, accuracy });
+        if (cause === 'fail') {
+          try { AudioEngine.error(); FX.glitchPulse(); } catch (e) {}
+          if (typeof activeOpts.onFinalEnd === 'function') {
+            activeOpts.onFinalEnd({ cause, score, bestCombo, accuracy });
+          }
+        } else {
+          triggerFinalCollapse(() => {
+            try { AudioEngine.success(); } catch (e) {}
+            if (typeof activeOpts.onFinalEnd === 'function') {
+              activeOpts.onFinalEnd({ cause, score, bestCombo, accuracy });
+            }
+          });
         }
         return;
       }
 
       const titleEl = el('gh-result-title');
       const subEl = el('gh-result-sub');
+      const statusEl = el('gh-save-status');
       if (cause === 'fail') {
         titleEl.textContent = 'VOCÊ FALHOU A MÚSICA';
         subEl.textContent = 'O Arquiteto não perdoa. Tente de novo.';
+        if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
         try { AudioEngine.error(); FX.glitchPulse(); } catch (e) {}
-      } else {
+        el('gh-result-score').textContent = String(score);
+        el('gh-result-combo').textContent = `${bestCombo}x`;
+        el('gh-result-acc').textContent = `${accuracy}%`;
+        el('gh-result').hidden = false;
+        return;
+      }
+
+      triggerFinalCollapse(() => {
         titleEl.textContent = 'FAIXA CONCLUÍDA';
         subEl.textContent = 'Você sobreviveu ao ritmo inteiro. A dificuldade IMPOSSÍVEL foi liberada.';
         unlockImpossibleMode();
-        try { AudioEngine.success(); } catch (e) {}
-      }
-      el('gh-result-score').textContent = String(score);
-      el('gh-result-combo').textContent = `${bestCombo}x`;
-      el('gh-result-acc').textContent = `${accuracy}%`;
-      el('gh-result').hidden = false;
+        // Ranking próprio de "O Arquiteto" (RF06/RF07 + auto-save já
+        // usados no resto do jogo) — ver autoSaveScore() no script
+        // principal, chamado aqui via closure.
+        autoSaveScore(score, '#gh-save-status');
+        el('gh-result-score').textContent = String(score);
+        el('gh-result-combo').textContent = `${bestCombo}x`;
+        el('gh-result-acc').textContent = `${accuracy}%`;
+        el('gh-result').hidden = false;
+      });
     }
 
     function stopAndCleanup() {
@@ -3513,6 +4129,10 @@
       ended = true;
       if (rafId) cancelAnimationFrame(rafId);
       detachKeys();
+      BossMusic.stop(true);
+      const stage = el('gh-stage');
+      if (stage) stage.classList.remove('gh-collapsed', 'gh-invert-flash', 'shake');
+      if (fxLayerEl) fxLayerEl.innerHTML = '';
       const layer = el('gh-notes-layer');
       if (layer) layer.innerHTML = '';
     }
@@ -3678,6 +4298,11 @@
         // tela e a abertura do minigame acontecem primeiro, sem depender
         // de nada que possa falhar (ex. efeitos visuais); o flash é extra.
         if (btn.dataset.difficulty === 'arquiteto') {
+          // Marca a dificuldade "arquiteto" no estado só pra identificar
+          // esse modo no ranking (autoSaveScore usa State.difficulty pra
+          // saber em qual lista salvar) — sem tocar em cronômetro, fases
+          // ou qualquer outra coisa do motor principal.
+          State.difficulty = 'arquiteto';
           showScreen('screen-guitarhero');
           GuitarHero.open();
           try { AudioEngine.click(); FX.whiteFlash(180); } catch (e) {}
@@ -3695,8 +4320,21 @@
       });
     });
 
+    $('#hall-toggle-btn').addEventListener('click', () => {
+      AudioEngine.click();
+      openDifficultyHallModal();
+    });
+    $('#difficulty-hall-close-btn').addEventListener('click', () => closeDifficultyHallModal());
+    $('#difficulty-hall-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'difficulty-hall-overlay') closeDifficultyHallModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if ($('#difficulty-hall-overlay') && !$('#difficulty-hall-overlay').hidden) closeDifficultyHallModal();
+    });
+
     $('#btn-instructions').addEventListener('click', () => showScreen('screen-instructions'));
-    $('#btn-credits').addEventListener('click', () => showScreen('screen-credits'));
+    $('#btn-credits').addEventListener('click', () => { renderCreditsHall(); showScreen('screen-credits'); });
     $('#btn-ranking').addEventListener('click', () => { renderRankingScreen(); showScreen('screen-ranking'); });
     $('#btn-exit').addEventListener('click', () => {
       logout();

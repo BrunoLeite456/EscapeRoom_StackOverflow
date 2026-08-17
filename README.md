@@ -11,7 +11,8 @@ Abra `index.html` em qualquer navegador moderno. Não precisa de servidor, build
 - `index.html` — telas do jogo (menu, instruções, créditos, ranking, intro, HUD, fases, game over, vitória).
 - `style.css` — tema visual (CRT, glitch, scanlines, vinheta, animações, responsividade).
 - `script.js` — toda a lógica: estado do jogo, cronômetro, integridade do projeto, motor de fases, áudio e efeitos.
-- `assets/sounds/` e `assets/images/` — pastas reservadas para quem quiser substituir os efeitos sintetizados por arquivos reais (samples de áudio, texturas, sprites). Por padrão o jogo **não depende de nenhum arquivo binário**: todos os sons são gerados em tempo real via Web Audio API e todos os efeitos visuais (ruído, glitch, névoa) são gerados via CSS/Canvas, para manter o projeto 100% autocontido e fácil de entregar.
+- `assets/sounds/` — contém a única exceção ao autocontido total do projeto: `nucleo-em-colapso.m4a` (+ fallback `.mp3`), a trilha real do confronto final com O Arquiteto no modo Impossível (ver seção abaixo). Todo o resto do jogo continua sem depender de nenhum arquivo binário: os demais sons são gerados em tempo real via Web Audio API e todos os efeitos visuais (ruído, glitch, névoa) são gerados via CSS/Canvas.
+- `assets/images/` — pasta reservada para quem quiser substituir texturas/sprites sintetizados por arquivos reais; não usada por padrão.
 
 ## Personagem
 
@@ -52,7 +53,21 @@ Não existe mais uma "Fase 5" jogável, nem uma tela de fase final, nem uma tela
 
 Ao vencer uma partida na dificuldade **Difícil**, uma quarta opção — **IMPOSSÍVEL** — é liberada na tela de seleção de dificuldade (fica salva no `localStorage`, então some só se você limpar os dados do site). Escolher essa dificuldade não abre o escape room: pula direto pra um minigame de ritmo estilo Guitar Hero em **tela cheia** (sem o "PC" quebrado, sem HUD de integridade, sem perguntas de requisitos). São 4 pistas (teclas `D` `F` `J` `K`) e uma barra de vida.
 
-Esse modo é **100% silencioso — não toca nenhum áudio**. O cronômetro das notas usa só o relógio do navegador (`performance.now()`), sem Web Audio API. O ritmo de queda das notas é calcado no andamento real e público de "Loser", do Tame Impala (83 BPM, tom de Fá menor — dados de tempo/tonalidade, que são fatos, não expressão protegida por direito autoral); o padrão de qual pista cada nota usa é um motivo original, gerado algoritmicamente só pra este minigame. Em nenhum momento a gravação, a melodia ou a letra da música são reproduzidas.
+O cronômetro das notas usa a posição real de reprodução do áudio (`audio.currentTime`), não um timer separado — assim o chart nunca dessincroniza da música, mesmo com pequenas variações de latência ao iniciar a faixa. O chart em si (quando cada nota cai e em qual pista) foi gerado **offline, por análise de áudio da faixa de verdade**: as batidas reais (~172 BPM) viraram as notas, e a pista de cada uma foi escolhida pela banda de frequência dominante daquele instante (grave/médio-grave/médio-agudo/agudo → pistas `D` `F` `J` `K`), com um leve balanceamento pra não repetir demais a mesma pista.
+
+A fase toca uma trilha real, **"Núcleo em Colapso"** — composição original gravada especificamente para este confronto (arquivo em `assets/sounds/nucleo-em-colapso.m4a`, com fallback `.mp3` para navegadores sem suporte a AAC), tocada por um `<audio>` comum em vez de sintetizada ao vivo. A faixa é tocada direto — sem passar pelo grafo do Web Audio API — o que evita problemas de CORS ao abrir o jogo direto do disco (sem servidor). Tom e andamento reais (172 BPM, Dó# menor) foram detectados por análise de áudio e usados pra remapear todo o ritmo da fase em cima da forma de onda de verdade, em vez de um andamento aproximado.
+
+Conforme a música avança, o palco vai "quebrando" progressivamente em **4 patamares** (calculados sobre os segundos reais da faixa, não sobre um progresso genérico): calmo até ~20s, sobe em ~20s/60s/120s e entra na reta final mais pesada em ~155s, pouco antes do clímax terminar em ~169,5s. Cada patamar dispara uma rajada de glifos corrompidos e um popup de erro de sistema (mensagens tipo `ARQUITETO.SYS — FALHA DE SEGMENTAÇÃO`), além de mover o indicador de "NÚCLEO DO ARQUITETO" no HUD. Por cima disso, **cada batida real da música** (não só as transições de patamar) dispara um pulso visual no palco, e a partir do patamar 2 isso vira uma chuva contínua de bugs, flicker cromático e tremores nas batidas fortes — o palco literalmente se desfazendo no ritmo da trilha. Ao vencer a música, uma sequência final de colapso (tremores em cascata, rajada grande de bugs, mais popups de erro) é bem mais intensa que qualquer patamar anterior — e essa é exatamente a hora em que a faixa real, sozinha, já está entrando no seu trecho mais quieto: o interlúdio melancólico da queda de O Arquiteto é a cauda de verdade da música, tocando por baixo do colapso e da tela de resultado, não mais um trecho sintetizado à parte.
+
+### A Lista
+
+Toda vez que alguém vence o modo Impossível pela primeira vez, o apelido entra n'**A Lista** — a ordem de quem já derrotou O Arquiteto (não é ranking por pontuação; é só a ordem de chegada, sem repetir nome). Ela aparece em três lugares:
+
+- **Na tela de vitória do Impossível**, no instante em que você vence: se é a sua primeira vez, seu nome é "escrito" com efeito de máquina de escrever ao final da lista; se você já estava nela, a lista só aparece normalmente (sem o efeito).
+- **Ao lado da própria opção IMPOSSÍVEL**, na tela de seleção de dificuldade: um botão "📜 A LISTA" abre um painel com a lista atual (sem efeito de escrita — isso é exclusivo do momento da vitória).
+- **Na tela de Créditos**: a mesma lista, sempre atualizada, sem precisar ter jogado.
+
+Assim como o ranking, A Lista é salva no `localStorage` (funciona offline) e, se o JSONBin estiver configurado (ver seção abaixo), também fica global — visível em qualquer aparelho.
 
 ## Persistência
 

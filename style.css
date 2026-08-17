@@ -857,9 +857,90 @@ body.firewall-active #hud-qtimer-notebook{ visibility:hidden; }
 .boss-bar-label{ width:90px; font-size:0.68rem; letter-spacing:0.06em; color:var(--c-text-dim); flex-shrink:0; }
 .boss-bar{ flex:1; height:10px; border:1px solid var(--c-line); border-radius:2px; overflow:hidden; background:var(--c-panel); }
 .boss-bar-fill{ height:100%; transition:width var(--dur-med) ease; }
-.boss-bar-architect{ background:var(--c-red); box-shadow:0 0 6px rgba(255,31,61,0.6); }
+.boss-bar-architect{ background:var(--c-red); box-shadow:0 0 6px rgba(255,31,61,0.6); transition:width var(--dur-med) ease, box-shadow var(--dur-med) ease; }
 .boss-bar-player{ background:var(--c-cyan); box-shadow:0 0 6px rgba(53,224,208,0.6); }
 .boss-intro-hold{ text-align:center; padding:60px 0; color:var(--c-text-dim); font-size:1.6rem; letter-spacing:0.3em; }
+
+/* ==================================================================
+   "QUEBRA" PROGRESSIVA DO ARQUITETO — quanto mais baixa a integridade
+   dele (arch-tier-0 a arch-tier-3), mais instável a própria barra e o
+   texto do HUD ficam, reforçando visualmente que ele está perdendo.
+   ================================================================== */
+.boss-readout-row{
+  display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  margin:-2px 0 10px; font-size:0.6rem; letter-spacing:0.05em;
+}
+.boss-readout{ color:var(--c-text-dim); text-transform:uppercase; }
+.arch-readout{ color:var(--c-red-dim); }
+.boss-faults{ color:var(--c-text-dim); }
+
+.boss-hud.arch-tier-1 .boss-bar-architect{ animation:archBarFlicker 1.8s infinite; }
+.boss-hud.arch-tier-1 .arch-readout{ color:var(--c-amber); }
+
+.boss-hud.arch-tier-2 .boss-bar-architect{ animation:archBarFlicker 0.9s infinite, corruptJitter 0.4s infinite; box-shadow:0 0 10px rgba(255,31,61,0.85); }
+.boss-hud.arch-tier-2 .boss-bar-arch-wrap{ animation:corruptJitter 0.5s infinite; }
+.boss-hud.arch-tier-2 .arch-readout{ color:var(--c-red); animation:archTextGlitch 1.2s infinite; }
+
+.boss-hud.arch-tier-3 .boss-bar-architect{ animation:archBarFlicker 0.45s infinite, corruptJitter 0.25s infinite; background:repeating-linear-gradient(90deg, var(--c-red) 0 6px, #3a0006 6px 10px); }
+.boss-hud.arch-tier-3 .boss-bar-arch-wrap{ animation:corruptJitter 0.3s infinite; border-color:var(--c-red); }
+.boss-hud.arch-tier-3 .arch-readout{ color:var(--c-red); animation:archTextGlitch 0.5s infinite; text-shadow:0 0 6px var(--c-red); }
+.boss-hud.arch-tier-3 .boss-bar-label:first-child{ animation:archTextGlitch 0.6s infinite; }
+
+@keyframes archBarFlicker{ 0%,100%{ opacity:1; } 45%{ opacity:1; } 50%{ opacity:0.45; } 55%{ opacity:1; } }
+@keyframes archTextGlitch{
+  0%,100%{ transform:translate(0,0); opacity:1; }
+  20%{ transform:translate(-1px,0.5px); opacity:0.7; }
+  40%{ transform:translate(1px,-0.5px); opacity:1; }
+  60%{ transform:translate(-1px,-0.5px); opacity:0.8; }
+  80%{ transform:translate(1px,0.5px); opacity:1; }
+}
+
+/* Corpo inteiro treme discretamente quando o Arquiteto entra em
+   colapso total (integridade <= 15%), até o confronto terminar. */
+body.architect-collapsing{ animation:bodyCollapseFlicker 2.2s infinite; }
+@keyframes bodyCollapseFlicker{
+  0%,92%,100%{ filter:none; }
+  93%{ filter:invert(0.08) hue-rotate(30deg); }
+  94%{ filter:none; }
+  96%{ filter:invert(0.05); }
+  97%{ filter:none; }
+}
+
+/* -- camada de efeitos por cima da fase do chefão: popups de "erro" e
+      glifos corrompidos que sobem e se desfazem sozinhos -- */
+.boss-fx-layer{ position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden; }
+.error-glitch-line{
+  position:absolute; max-width:min(60vw, 320px);
+  font-family:var(--font-mono); font-size:0.66rem; letter-spacing:0.03em;
+  color:var(--c-red); background:rgba(10,0,2,0.85);
+  border:1px solid var(--c-red); border-left-width:3px;
+  padding:5px 8px; text-transform:uppercase;
+  box-shadow:0 0 14px rgba(255,31,61,0.5);
+  animation:errorPopFade 1.45s ease forwards;
+}
+@keyframes errorPopFade{
+  0%{ opacity:0; transform:translate(-6px,0); clip-path:inset(0 100% 0 0); }
+  8%{ opacity:1; transform:translate(0,0); clip-path:inset(0 0 0 0); }
+  14%{ transform:translate(2px,0); }
+  18%{ transform:translate(-2px,0); }
+  22%{ transform:translate(0,0); }
+  85%{ opacity:1; }
+  100%{ opacity:0; transform:translate(4px,0); clip-path:inset(0 0 0 60%); }
+}
+.bug-glyph{
+  position:absolute; font-family:var(--font-mono); font-weight:700; font-size:0.9rem;
+  color:var(--c-red); text-shadow:0 0 6px var(--c-red-glow);
+  animation:bugRise 1.2s ease-out forwards;
+}
+.bug-glyph:nth-child(2n){ color:var(--c-cyan); text-shadow:0 0 6px rgba(53,224,208,0.7); }
+.bug-glyph:nth-child(3n){ color:var(--c-amber); text-shadow:0 0 6px rgba(255,176,32,0.7); }
+@keyframes bugRise{
+  0%{ opacity:0; transform:translateY(0) scale(0.8); }
+  12%{ opacity:1; transform:translateY(-6px) scale(1); }
+  50%{ transform:translateY(-34px) translateX(3px) scale(1); }
+  70%{ transform:translateY(-52px) translateX(-3px) scale(1); }
+  100%{ opacity:0; transform:translateY(-78px) scale(0.7); }
+}
 
 .boss-corrupt{ position:relative; }
 .boss-corrupt.invert-fx{ filter:invert(1) hue-rotate(180deg); }
@@ -1442,6 +1523,87 @@ body.glitching #noise-canvas{ opacity:0.2; }
 }
 .ranking-empty{ color:var(--c-text-dim); font-style:italic; text-align:center; }
 
+/* -- Modo Impossível: nº1 em destaque + Salão da Fama (ordem de quem
+      derrotou O Arquiteto), no lugar da tabela de pontuação normal -- */
+.ranking-champion{
+  display:flex; align-items:center; gap:14px;
+  background:linear-gradient(135deg, rgba(255,176,32,0.14), rgba(255,176,32,0.03));
+  border:1px solid rgba(255,176,32,0.4); border-radius:6px;
+  padding:16px 18px; margin-bottom:22px;
+}
+.champion-crown{ font-size:2.1rem; line-height:1; filter:drop-shadow(0 0 8px rgba(255,176,32,0.6)); }
+.champion-info{ display:flex; flex-direction:column; gap:2px; }
+.champion-label{ font-size:0.62rem; letter-spacing:0.14em; color:var(--c-text-dim); text-transform:uppercase; }
+.champion-name{ font-size:1.15rem; font-weight:bold; color:var(--c-amber); letter-spacing:0.03em; }
+.champion-score{ font-size:0.78rem; color:var(--c-text-dim); }
+.hall-title{
+  font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;
+  color:var(--c-text-dim); margin:0 0 10px;
+}
+.hall-list{ list-style:decimal; padding-left:26px; margin:0; }
+.hall-list li{
+  padding:7px 4px; border-bottom:1px solid var(--c-line); font-size:0.86rem; letter-spacing:0.03em;
+}
+.hall-list li:last-child{ border-bottom:none; }
+.hall-list li.ranking-empty{ list-style:none; padding-left:0; margin-left:-26px; }
+
+/* -- mesmo Salão da Fama, versão "créditos" dentro da tela de vitória
+      do Impossível: nome novo é escrito com efeito de máquina de
+      escrever ao final da lista -- */
+.hall-of-fame{
+  text-align:left; background:var(--c-panel); border:1px solid var(--c-line);
+  border-radius:4px; padding:14px 18px; margin-bottom:18px;
+}
+.hall-of-fame .hall-title{ text-align:center; }
+.hall-entry.hall-entry-new{ color:var(--c-amber); text-shadow:0 0 8px rgba(255,176,32,0.45); }
+.hall-entry.hall-entry-new::after{
+  content:'▍'; margin-left:2px; animation:pulseOpacity 0.8s steps(2) infinite;
+}
+.hall-entry.hall-entry-mine{ color:var(--c-phosphor); }
+
+/* -- "A Lista" ao lado da opção Impossível (tela de dificuldade) e a
+      mesma versão simplificada usada na tela de créditos: sem efeito de
+      máquina de escrever, só a lista atual. -- */
+.hall-toggle-btn{
+  display:block; width:100%; margin-top:10px; padding:9px 14px;
+  background:var(--c-panel); border:1px solid var(--c-line); border-radius:4px;
+  color:var(--c-text-dim); font-family:var(--font-mono); font-size:0.76rem;
+  letter-spacing:0.05em; cursor:pointer; transition:border-color var(--dur-fast), color var(--dur-fast);
+}
+.hall-toggle-btn:hover{ border-color:var(--c-phosphor); color:var(--c-phosphor); }
+.hall-toggle-btn[aria-expanded="true"]{ border-color:var(--c-phosphor); color:var(--c-phosphor); }
+
+/* -- Popup d'"A Lista", aberto pelo botão acima: mesmo padrão de overlay
+      fixo por cima de tudo que o caderno de anotações usa, com o visual
+      "painel de terminal" do resto do hall-of-fame. -- */
+.hall-modal-overlay{
+  position:fixed; inset:0; z-index:60;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.65);
+  padding:20px;
+}
+.hall-modal-overlay[hidden]{ display:none; }
+.hall-modal-panel{
+  width:min(92vw, 480px); max-height:80vh;
+  background:var(--c-panel); border:1px solid var(--c-line); border-radius:6px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.7);
+  padding:18px 20px;
+  display:flex; flex-direction:column; overflow:hidden;
+  animation:screenFadeIn var(--dur-med) ease both;
+}
+.hall-modal-header{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  padding-bottom:10px; margin-bottom:6px; border-bottom:1px solid var(--c-line);
+}
+.hall-modal-header .hall-title{ margin:0; }
+.hall-modal-note{
+  font-size:0.76rem; line-height:1.5; color:var(--c-text-dim);
+  margin:0 0 12px;
+}
+.hall-modal-panel .hall-list{ overflow-y:auto; }
+#credits-hall{ margin-top:18px; }
+#credits-hall .hall-title{ text-align:center; }
+
 /* ==================================================================
    DIFICULDADE — dica de modo secreto bloqueado
    ================================================================== */
@@ -1498,10 +1660,12 @@ body.glitching #noise-canvas{ opacity:0.2; }
   mix-blend-mode:screen;
 }
 
-/* ---- Destruição progressiva: quanto mais a fase avança, mais forte
-   ficam as rachaduras e o ruído (ver updateStageCorruption() em
-   GuitarHero/script.js, que aplica gh-corrupt-1/2/3 conforme o
-   progresso da música). Puramente visual — não afeta a jogabilidade. */
+/* ---- Destruição progressiva: quanto mais perto do clímax real da
+   faixa "Núcleo em Colapso", mais fortes ficam as rachaduras e o
+   ruído (ver updateStageCorruption()/updateBeatPulse() em
+   GuitarHero/script.js, que aplicam gh-corrupt-1..4 e os pulsos por
+   batida conforme os patamares reais de energia da música). Puramente
+   visual — não afeta a jogabilidade. */
 .gh-crack-overlay{ position:absolute; inset:0; z-index:8; pointer-events:none; overflow:hidden; }
 .gh-crack{
   position:absolute; width:2px; background:rgba(255,255,255,0.9);
@@ -1526,6 +1690,22 @@ body.glitching #noise-canvas{ opacity:0.2; }
 .gh-stage.gh-corrupt-3 .gh-crack-d{ opacity:0.65; }
 .gh-stage.gh-corrupt-3 .gh-tech-grid{ animation-duration:1.6s; opacity:0.85; }
 .gh-stage.gh-corrupt-3{ animation:ghStageFlicker 2.2s infinite; }
+
+/* Patamar 4 — a reta final antes do colapso (últimos ~14s do clímax
+   real da faixa, ver TIER_BOUNDS em script.js). Tudo do patamar 3,
+   só que no talo: rachaduras cravadas, grade quase parada de tão
+   rápida, e um flicker mais frequente e mais bruto — o Arquiteto já
+   está caindo aos pedaços antes mesmo do colapso final. */
+.gh-stage.gh-corrupt-4 .gh-crack-a, .gh-stage.gh-corrupt-4 .gh-crack-b,
+.gh-stage.gh-corrupt-4 .gh-crack-c, .gh-stage.gh-corrupt-4 .gh-crack-d{
+  opacity:1; box-shadow:0 0 14px 3px rgba(255,60,60,0.75);
+  animation:ghCrackPulse 0.6s infinite;
+}
+.gh-stage.gh-corrupt-4 .gh-tech-grid{ animation-duration:0.8s; opacity:0.95; filter:blur(0.3px); }
+.gh-stage.gh-corrupt-4 .gh-tech-circuit{ opacity:0.7; }
+.gh-stage.gh-corrupt-4{ animation:ghStageFlicker 1.1s infinite; }
+.gh-stage.gh-corrupt-4 .gh-noise-overlay{ opacity:0.42; animation:ghNoiseJitter 0.1s steps(2) infinite; }
+
 @keyframes ghCrackPulse{
   0%, 100%{ opacity:0.85; } 50%{ opacity:0.35; }
 }
@@ -1534,6 +1714,28 @@ body.glitching #noise-canvas{ opacity:0.2; }
   97%{ filter:brightness(1.5) saturate(0.4); }
   98%{ filter:brightness(0.6); }
 }
+
+/* Pulso curto no ritmo de CADA batida real da faixa (ver
+   updateBeatPulse()/onBeat() em GuitarHero) — sutil sozinho, mas
+   junto com os efeitos de patamar acima cria a sensação de que o
+   palco inteiro "respira" junto com a música. */
+.gh-stage.gh-beat-pulse{ animation:ghBeatPulse 140ms ease-out; }
+@keyframes ghBeatPulse{
+  0%{ filter:brightness(1); transform:scale(1); }
+  30%{ filter:brightness(1.18); transform:scale(1.004); }
+  100%{ filter:brightness(1); transform:scale(1); }
+}
+
+/* Flicker cromático nas batidas fortes (patamar 3+) — separado do
+   ghInvertFlash (que só toca nas transições de patamar), esse é mais
+   leve e pode repetir a cada tempo forte sem cansar a vista. */
+.gh-stage.gh-chroma-flicker{ animation:ghChromaFlicker 180ms ease-out; }
+@keyframes ghChromaFlicker{
+  0%{ filter:none; }
+  40%{ filter:hue-rotate(25deg) saturate(1.6) brightness(1.1); }
+  100%{ filter:none; }
+}
+
 
 .gh-noise-overlay{
   position:absolute; inset:0; z-index:9; pointer-events:none; opacity:0;
@@ -1545,6 +1747,45 @@ body.glitching #noise-canvas{ opacity:0.2; }
 .gh-stage.gh-corrupt-3 .gh-noise-overlay{ opacity:0.34; animation:ghNoiseJitter 0.15s steps(2) infinite; }
 @keyframes ghNoiseJitter{
   from{ transform:translateY(0); } to{ transform:translateY(3px); }
+}
+
+/* Tremor pontual do palco inteiro ao cruzar um novo patamar de dano —
+   reaproveita o mesmo tremor do monitor da fase de requisitos. */
+.gh-stage.shake{ animation:monitorShake 0.4s; }
+
+/* Flash rápido de cores invertidas — dispara junto com cada rajada de
+   bugs, um "soco na tela" bem curto. */
+.gh-stage.gh-invert-flash{ animation:ghInvertFlash 160ms ease; }
+@keyframes ghInvertFlash{
+  0%{ filter:none; } 35%{ filter:invert(1) hue-rotate(180deg) saturate(1.4); } 100%{ filter:none; }
+}
+
+/* ==================================================================
+   COLAPSO FINAL — dispara só quando O Arquiteto cai de vez (faixa
+   concluída com sucesso). Muito mais destruído que qualquer patamar
+   de corrupção durante a partida: rachaduras no máximo, ruído no teto,
+   grade tecnológica travando e um estouro de cor final, até assentar
+   num resíduo permanente (ligeira estática/contraste) até a tela mudar.
+   ================================================================== */
+.gh-stage.gh-collapsed .gh-crack-a,
+.gh-stage.gh-collapsed .gh-crack-b,
+.gh-stage.gh-collapsed .gh-crack-c,
+.gh-stage.gh-collapsed .gh-crack-d{ opacity:1; box-shadow:0 0 16px 3px rgba(255,80,80,0.7); }
+.gh-stage.gh-collapsed .gh-noise-overlay{ opacity:0.5; animation:ghNoiseJitter 0.1s steps(2) infinite; }
+.gh-stage.gh-collapsed .gh-tech-grid{ animation-duration:0.9s; opacity:0.3; filter:blur(0.5px); }
+.gh-stage.gh-collapsed .gh-tech-circuit{ opacity:0.15; }
+.gh-stage.gh-collapsed{ animation:ghFinalCollapse 2s ease-out 1; }
+@keyframes ghFinalCollapse{
+  0%{ filter:none; transform:translate(0,0); }
+  6%{ filter:invert(1) hue-rotate(200deg) brightness(1.6); transform:translate(-8px,4px); }
+  12%{ filter:none; transform:translate(6px,-4px); }
+  18%{ filter:contrast(2.2) saturate(0); transform:translate(-5px,3px); }
+  24%{ filter:none; transform:translate(0,0); }
+  32%{ filter:invert(1); transform:translate(7px,-3px); }
+  38%{ filter:none; transform:translate(0,0); }
+  50%{ filter:brightness(2) saturate(0.2); }
+  56%{ filter:none; }
+  100%{ filter:contrast(1.12) saturate(0.75); transform:translate(0,0); }
 }
 
 .gh-hud{
@@ -1562,6 +1803,11 @@ body.glitching #noise-canvas{ opacity:0.2; }
 #gh-combo{ color:var(--c-amber); }
 .gh-hud-mid{ flex:1; align-items:center; max-width:480px; margin:0 auto; }
 .gh-track-name{ font-size:0.68rem; letter-spacing:0.06em; color:var(--c-cyan); text-align:center; margin-bottom:6px; }
+.gh-core-readout{
+  display:block; font-size:0.6rem; letter-spacing:0.05em; text-transform:uppercase;
+  color:var(--c-text-dim); text-align:center; margin-top:5px;
+}
+.gh-core-readout.core-critical{ color:var(--c-red); animation:archTextGlitch 0.8s infinite; text-shadow:0 0 6px var(--c-red); }
 .gh-health-track{
   width:100%; height:8px; border-radius:4px; background:var(--c-panel-2);
   border:1px solid var(--c-line); overflow:hidden;
