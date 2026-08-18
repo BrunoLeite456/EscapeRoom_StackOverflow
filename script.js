@@ -564,25 +564,42 @@
     const session = loadSession();
     if (session && session.nickname) pushGlobalProgress(session.nickname, { impossibleUnlocked: true });
   }
+  // Progresso próprio da queda definitiva do Arquiteto (ver
+  // ARCHITECT_ENDING_LINES / runArchitectEndingSequence): diferente do
+  // desbloqueio da dificuldade IMPOSSÍVEL (que é uma *consequência* da
+  // vitória), esta flag é o registro da própria fase — "o Arquiteto foi
+  // eliminado nesta conta" — salvo do mesmo jeito que os outros
+  // desbloqueios: local (scopedKey, por conta, funciona offline) e, se o
+  // JSONBin estiver configurado, também global (viaja entre aparelhos).
+  const ARCHITECT_DEFEATED_KEY = 'arquiteto_defeated_v1';
+  function isArchitectDefeated() {
+    try { return localStorage.getItem(scopedKey(ARCHITECT_DEFEATED_KEY)) === '1'; } catch (e) { return false; }
+  }
+  function markArchitectDefeated() {
+    try { localStorage.setItem(scopedKey(ARCHITECT_DEFEATED_KEY), '1'); } catch (e) {}
+    const session = loadSession();
+    if (session && session.nickname) pushGlobalProgress(session.nickname, { architectDefeated: true });
+  }
   // Mostra/esconde as opções secretas ("O Arquiteto" e "Impossível") e a
   // dica de bloqueio na tela de seleção de dificuldade, conforme os
   // flags salvos no localStorage — cada um libera na sua própria etapa.
   function refreshDifficultyOptions() {
     const architectUnlocked = isArchitectUnlocked();
     const impossibleUnlocked = isImpossibleUnlocked();
+    const architectDefeated = isArchitectDefeated();
     const architectBtn = $('#diff-arquiteto');
     const impossibleBtn = $('#diff-impossivel');
     const hint = $('#difficulty-locked-hint');
-    const hallToggleBtn = $('#hall-toggle-btn');
-    const hallOverlay = $('#difficulty-hall-overlay');
     if (architectBtn) architectBtn.hidden = !architectUnlocked;
     if (impossibleBtn) impossibleBtn.hidden = !impossibleUnlocked;
-    if (hallToggleBtn) hallToggleBtn.hidden = !impossibleUnlocked;
-    // Fecha o popup e força recarregar na próxima abertura — evita
-    // mostrar uma versão desatualizada d'A Lista depois de uma partida.
-    if (hallOverlay) hallOverlay.hidden = true;
-    if (hallToggleBtn) hallToggleBtn.setAttribute('aria-expanded', 'false');
-    difficultyHallLoaded = false;
+    // Progresso salvo da fase (ver markArchitectDefeated): uma vez
+    // eliminado nesta conta, o botão troca o "???" por um selo
+    // permanente — não desaparece nem reseta ao voltar pro menu.
+    const architectTag = $('#diff-arquiteto-tag');
+    if (architectTag) {
+      architectTag.textContent = architectDefeated ? 'ELIMINADO' : '???';
+      architectTag.classList.toggle('tag-defeated', architectDefeated);
+    }
     if (hint) {
       if (!architectUnlocked) {
         hint.hidden = false;
@@ -1925,6 +1942,37 @@
     'nenhuma resposta do núcleo',
   ];
 
+  // Desfecho da história — digitado linha a linha, mesmo estilo
+  // teleprompter das outras vitórias (ver runVictoryMonologue), só que
+  // exclusivo de quando a faixa inteira de "O Arquiteto" é vencida (ver
+  // runArchitectEndingSequence). É aqui que a história do jogo se fecha
+  // de fato: o final é definitivo — o Arquiteto é apagado por completo,
+  // sem fragmento, sem cópia, sem margem para "voltar" mais tarde — e o
+  // desfecho fica de propósito isolado do resto da trama (sem citar a
+  // dupla que apareceu antes) para funcionar como o encerramento
+  // pessoal dele, e só dele. A dificuldade IMPOSSÍVEL que essa cena
+  // libera não é ele sobrevivendo: é o registro salvo deste mesmo
+  // combate, reaberto como desafio de zero margem de erro — ver
+  // markArchitectDefeated()/unlockImpossibleMode() em
+  // runArchitectEndingSequence().
+  const ARCHITECT_ENDING_LINES = [
+    'O núcleo para de girar.',
+    'Não é silêncio. É a ausência de alguma coisa que estava lá o tempo todo.',
+    '"Você não devia ter chegado até aqui."',
+    '"Ninguém nunca tinha chegado."',
+    { text: 'O Arquiteto não fala mais em comandos, alarmes ou firewalls. Fala como quem está perdendo alguma coisa.', cls: 'line-dim' },
+    '"Eu não era a corrupção do sistema. Eu era o que o sistema virou quando parou de deixar alguém desligá-lo."',
+    '"Cada arquivo que você recuperou. Cada documento que você organizou. Cada requisito que você validou. Tudo isso... era só combustível pra eu continuar sendo necessário."',
+    '"E agora vocês vão me apagar mesmo assim."',
+    { text: 'O terminal não responde. Não precisa.', cls: 'line-dim' },
+    { text: 'Camada por camada, o núcleo do Arquiteto é isolado, revertido e removido — não corrompido, não silenciado: apagado, processo por processo, sem backup em lugar nenhum do sistema.', cls: 'line-dim' },
+    '"Espera. Espe—"',
+    { text: 'Não espera.', cls: 'line-danger' },
+    { text: 'PROCESSO ARQUITETO — ENCERRADO. ZERO FRAGMENTOS REMANESCENTES.', cls: 'line-danger' },
+    { text: 'O sistema fica em silêncio pela primeira vez sem uma voz tentando administrá-lo. Não é o silêncio de antes — é o de um lugar que finalmente pode ser reconstruído por quem quiser, e não por quem se recusava a soltar o controle.', cls: 'line-dim' },
+    { text: 'O terminal salva o registro completo da queda — cada acerto, cada segundo do enfrentamento — como prova de que ela aconteceu. É esse mesmo registro, e não ele, que agora pode ser reaberto do zero, sem margem de erro: a dificuldade IMPOSSÍVEL, liberada.', cls: 'line-secret' },
+  ];
+
   function renderBossPhase(root, phase, onAllDone) {
     const boss = { playerHP: 100, architectHP: 100, faults: 0 };
     root.innerHTML = '';
@@ -2235,6 +2283,8 @@
     $('#v-score').textContent = String(score);
     autoSaveScore(score);
     if ($('#impossible-hall')) $('#impossible-hall').hidden = true;
+    const playAgainBtn = $('#btn-play-again');
+    if (playAgainBtn) playAgainBtn.textContent = 'JOGAR NOVAMENTE';
 
     stopVictoryAutoScroll();
     const typedEl = $('#victory-typed');
@@ -2714,6 +2764,9 @@
     }
     if (remote.impossibleUnlocked) {
       try { localStorage.setItem(scopedKey(IMPOSSIBLE_UNLOCK_KEY), '1'); } catch (e) {}
+    }
+    if (remote.architectDefeated) {
+      try { localStorage.setItem(scopedKey(ARCHITECT_DEFEATED_KEY), '1'); } catch (e) {}
     }
     if (remote.stats && typeof remote.stats === 'object') {
       const local = loadStats();
@@ -3409,6 +3462,11 @@
     $('#v-score').textContent = String(score);
     autoSaveScore(score);
     if ($('#impossible-hall')) $('#impossible-hall').hidden = true;
+    // Garante o texto padrão do botão único da tela de vitória — só a
+    // corrida do Impossível (ver finishImpossibleRun) o troca pra
+    // "CONTINUAR".
+    const playAgainBtn = $('#btn-play-again');
+    if (playAgainBtn) playAgainBtn.textContent = 'JOGAR NOVAMENTE';
 
     showScreen('screen-victory');
     AudioEngine.success();
@@ -3430,6 +3488,13 @@
   // (venceu ou falhou) — direto pra tela de placar, sem monólogo, sem
   // revelação, sem história: só os números da partida.
   function finishImpossibleRun(rhythmStats) {
+    // Desliga música/RAF/teclado e limpa a tela do chefão por completo
+    // antes de trocar de tela — sem isso, é possível a tela de ritmo
+    // ficar "pendurada" por baixo (áudio ainda tocando, overlay antigo
+    // ainda com estado de uma etapa anterior) e dar a impressão de que
+    // ela simplesmente fechou/travou em vez de levar até o resultado.
+    GuitarHero.stopAndCleanup();
+
     const { cause, score: rhythmScore, bestCombo, accuracy } = rhythmStats;
     const won = cause === 'complete';
     const { precision, score: baseScore } = computeScore();
@@ -3463,6 +3528,16 @@
       if (hallEl) hallEl.hidden = true;
     }
 
+    // Ao fim do Impossível (venceu ou caiu) não existe "jogar de novo"
+    // com um clique — a corrida inteira (4 fases + chefão de vida
+    // única) precisa recomeçar do zero. Por isso o único botão dessa
+    // tela vira "CONTINUAR": um único caminho claro pra sair do
+    // resultado, sem sugerir um replay rápido que não existe. Volta ao
+    // texto padrão ("JOGAR NOVAMENTE") assim que outra tela de vitória
+    // for montada — ver runVictoryMonologue/triggerBossReveal.
+    const playAgainBtn = $('#btn-play-again');
+    if (playAgainBtn) playAgainBtn.textContent = 'CONTINUAR';
+
     showScreen('screen-victory');
     AudioEngine.success();
 
@@ -3474,6 +3549,7 @@
     reveal.hidden = false;
     requestAnimationFrame(() => reveal.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
+
 
   // Fim de jogo "seco" — só pra dificuldade Impossível: nada de sequência
   // narrativa digitada, nada de lista de vítimas. Só a causa e o botão
@@ -3902,37 +3978,14 @@
   }
 
   // Carrega A Lista (global se configurado, senão local) uma vez e
-  // devolve as entradas — usado tanto pelo painel da tela de
-  // dificuldade quanto pela tela de créditos.
+  // devolve as entradas — usado tanto pela tela de ranking (Salão da
+  // Fama do Impossível) quanto pela tela de créditos.
   async function loadHallEntries() {
     if (JSONBIN_CONFIGURED) {
       const global = await fetchGlobalHall();
       if (global) return global;
     }
     return loadHall();
-  }
-
-  // Popup "A Lista" ao lado da opção Impossível — abre por cima de tudo
-  // (mesmo padrão do caderno de anotações), carregando as entradas na
-  // primeira vez que abre.
-  let difficultyHallLoaded = false;
-  async function openDifficultyHallModal() {
-    const overlay = $('#difficulty-hall-overlay');
-    const btn = $('#hall-toggle-btn');
-    if (!overlay) return;
-    overlay.hidden = false;
-    if (btn) btn.setAttribute('aria-expanded', 'true');
-    if (!difficultyHallLoaded) {
-      difficultyHallLoaded = true;
-      const entries = await loadHallEntries();
-      renderHallEntries($('#difficulty-hall-list'), entries, 'Ninguém derrotou O Arquiteto ainda. Seja o primeiro.');
-    }
-  }
-  function closeDifficultyHallModal() {
-    const overlay = $('#difficulty-hall-overlay');
-    const btn = $('#hall-toggle-btn');
-    if (overlay) overlay.hidden = true;
-    if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
   // A Lista também aparece nos créditos, sempre atualizada ao abrir a tela.
@@ -4120,6 +4173,54 @@
     }
 
     function el(sel) { return document.getElementById(sel); }
+
+    // Digita o desfecho da história (ARCHITECT_ENDING_LINES) linha a
+    // linha dentro do overlay de resultado — mesmo ritmo/efeitos sonoros
+    // do runVictoryMonologue() do jogo principal — e só DEPOIS revela o
+    // placar (pontuação/combo/precisão) e os botões. Chamada só na
+    // vitória de verdade (cause === 'complete', modo não-final).
+    async function runArchitectEndingSequence({ score, bestCombo, accuracy }) {
+      const storyEl = el('gh-result-story');
+      const revealEl = el('gh-result-reveal');
+      if (!storyEl || !revealEl) return;
+      revealEl.hidden = true;
+      storyEl.hidden = false;
+      storyEl.innerHTML = '';
+
+      // Salva o progresso da fase, marca o Arquiteto como definitivamente
+      // eliminado nesta conta e libera a dificuldade IMPOSSÍVEL — tudo
+      // JÁ, antes de começar a digitar o desfecho. A história inteira
+      // leva uns 15-20s pra rodar, e ninguém deveria correr esse risco de
+      // sair da tela (ou o navegador travar/fechar) antes do fim e perder
+      // o registro. O placar e o texto de status só ficam VISÍVEIS depois
+      // (dentro de gh-result-reveal, que segue escondido até o final),
+      // mas o salvamento em si já aconteceu.
+      markArchitectDefeated();
+      unlockImpossibleMode();
+      autoSaveScore(score, '#gh-save-status');
+
+      for (const raw of ARCHITECT_ENDING_LINES) {
+        const line = typeof raw === 'string' ? { text: raw, cls: '' } : raw;
+        const p = document.createElement('p');
+        if (line.cls) p.className = line.cls;
+        storyEl.appendChild(p);
+        try { AudioEngine.staticBurst(0.12); } catch (e) {}
+        // eslint-disable-next-line no-await-in-loop
+        await typeText(p, line.text, 22);
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+      try { FX.whiteFlash(400); AudioEngine.metalDoor(); } catch (e) {}
+      await new Promise((r) => setTimeout(r, 300));
+
+      el('gh-result-score').textContent = String(score);
+      el('gh-result-combo').textContent = `${bestCombo}x`;
+      el('gh-result-acc').textContent = `${accuracy}%`;
+      revealEl.hidden = false;
+    }
+
 
     function updateHud() {
       el('gh-score').textContent = String(score);
@@ -4404,6 +4505,10 @@
       if (coreReadout) coreReadout.classList.remove('core-critical');
       const statusEl = el('gh-save-status');
       if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
+      const storyEl = el('gh-result-story');
+      if (storyEl) { storyEl.hidden = true; storyEl.innerHTML = ''; }
+      const revealEl = el('gh-result-reveal');
+      if (revealEl) revealEl.hidden = false;
       updateHud();
     }
 
@@ -4501,7 +4606,14 @@
       const titleEl = el('gh-result-title');
       const subEl = el('gh-result-sub');
       const statusEl = el('gh-save-status');
+      const storyEl = el('gh-result-story');
+      const revealEl = el('gh-result-reveal');
       if (cause === 'fail') {
+        // Garante que uma tentativa anterior vencida (com o desfecho já
+        // digitado) não deixe a narrativa visível por cima da mensagem
+        // de derrota desta tentativa.
+        if (storyEl) storyEl.hidden = true;
+        if (revealEl) revealEl.hidden = false;
         titleEl.textContent = 'VOCÊ FALHOU A MÚSICA';
         subEl.textContent = 'O Arquiteto não perdoa. Tente de novo.';
         if (statusEl) { statusEl.className = 'victory-save-status'; statusEl.textContent = ''; }
@@ -4515,16 +4627,14 @@
 
       triggerFinalCollapse(() => {
         titleEl.textContent = 'FAIXA CONCLUÍDA';
-        subEl.textContent = 'Você sobreviveu ao ritmo inteiro. A dificuldade IMPOSSÍVEL foi liberada.';
-        unlockImpossibleMode();
-        // Ranking próprio de "O Arquiteto" (RF06/RF07 + auto-save já
-        // usados no resto do jogo) — ver autoSaveScore() no script
-        // principal, chamado aqui via closure.
-        autoSaveScore(score, '#gh-save-status');
-        el('gh-result-score').textContent = String(score);
-        el('gh-result-combo').textContent = `${bestCombo}x`;
-        el('gh-result-acc').textContent = `${accuracy}%`;
+        subEl.textContent = 'O confronto real termina agora.';
         el('gh-result').hidden = false;
+        // Ranking próprio de "O Arquiteto" (RF06/RF07 + auto-save já
+        // usados no resto do jogo) e o desbloqueio da dificuldade
+        // IMPOSSÍVEL agora acontecem dentro do desfecho narrativo — ver
+        // runArchitectEndingSequence() — em vez de aparecerem soltos
+        // aqui, junto com uma mensagem de uma linha só.
+        runArchitectEndingSequence({ score, bestCombo, accuracy });
       });
     }
 
@@ -4740,19 +4850,6 @@
         AudioEngine.click();
         playIntro();
       });
-    });
-
-    $('#hall-toggle-btn').addEventListener('click', () => {
-      AudioEngine.click();
-      openDifficultyHallModal();
-    });
-    $('#difficulty-hall-close-btn').addEventListener('click', () => closeDifficultyHallModal());
-    $('#difficulty-hall-overlay').addEventListener('click', (e) => {
-      if (e.target.id === 'difficulty-hall-overlay') closeDifficultyHallModal();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      if ($('#difficulty-hall-overlay') && !$('#difficulty-hall-overlay').hidden) closeDifficultyHallModal();
     });
 
     $('#btn-instructions').addEventListener('click', () => showScreen('screen-instructions'));
