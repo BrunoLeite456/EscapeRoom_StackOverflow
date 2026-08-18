@@ -541,22 +541,28 @@
   // Libera "O Arquiteto" — só depois de vencer uma partida na Difícil.
   // Reaproveita a chave antiga de localStorage (mesmo nome de antes de O
   // Arquiteto se chamar "Impossível"), então quem já tinha liberado o
-  // modo secreto continua com ele liberado.
+  // modo secreto continua com ele liberado — agora isolado por conta
+  // (ver scopedKey), então cada apelido tem seu próprio progresso.
   const ARCHITECT_UNLOCK_KEY = 'arquiteto_impossible_unlocked_v1';
   function isArchitectUnlocked() {
-    try { return localStorage.getItem(ARCHITECT_UNLOCK_KEY) === '1'; } catch (e) { return false; }
+    try { return localStorage.getItem(scopedKey(ARCHITECT_UNLOCK_KEY)) === '1'; } catch (e) { return false; }
   }
   function unlockArchitectMode() {
-    try { localStorage.setItem(ARCHITECT_UNLOCK_KEY, '1'); } catch (e) {}
+    try { localStorage.setItem(scopedKey(ARCHITECT_UNLOCK_KEY), '1'); } catch (e) {}
+    const session = loadSession();
+    if (session && session.nickname) pushGlobalProgress(session.nickname, { architectUnlocked: true });
   }
   // Libera a nova dificuldade "Impossível" — só depois de vencer O
-  // Arquiteto (concluir a faixa de ritmo inteira sem falhar).
+  // Arquiteto (concluir a faixa de ritmo inteira sem falhar). Também
+  // isolado por conta.
   const IMPOSSIBLE_UNLOCK_KEY = 'arquiteto_final_unlocked_v1';
   function isImpossibleUnlocked() {
-    try { return localStorage.getItem(IMPOSSIBLE_UNLOCK_KEY) === '1'; } catch (e) { return false; }
+    try { return localStorage.getItem(scopedKey(IMPOSSIBLE_UNLOCK_KEY)) === '1'; } catch (e) { return false; }
   }
   function unlockImpossibleMode() {
-    try { localStorage.setItem(IMPOSSIBLE_UNLOCK_KEY, '1'); } catch (e) {}
+    try { localStorage.setItem(scopedKey(IMPOSSIBLE_UNLOCK_KEY), '1'); } catch (e) {}
+    const session = loadSession();
+    if (session && session.nickname) pushGlobalProgress(session.nickname, { impossibleUnlocked: true });
   }
   // Mostra/esconde as opções secretas ("O Arquiteto" e "Impossível") e a
   // dica de bloqueio na tela de seleção de dificuldade, conforme os
@@ -2559,6 +2565,19 @@
   const USERS_KEY = 'arquiteto_users_v1'; // cache local de contas (cadastro/login)
   const HALL_KEY = 'arquiteto_impossible_hall_v1'; // Salão da Fama do modo Impossível
 
+  // Progresso (dashboard + desbloqueio de dificuldades secretas) precisa
+  // ser POR CONTA, não por navegador — senão uma conta nova herda o
+  // progresso de outra conta só por estar no mesmo aparelho. `scopedKey`
+  // gruda o apelido da sessão atual na chave de localStorage, isolando
+  // o progresso de cada login. Sem sessão ativa, cai num balde
+  // "_anon" à parte (não deveria acontecer nas telas que usam isso,
+  // já que todas exigem login antes).
+  function scopedKey(baseKey) {
+    const session = loadSession();
+    const nick = (session && session.nickname) ? session.nickname.toLowerCase() : '_anon';
+    return `${baseKey}::${nick}`;
+  }
+
   // -------------------------------------------------------------------
   // JSONBin.io — mesma configuração usada pelo ranking global. O bin
   // guarda um único objeto JSON com três listas: "scores" (ranking),
@@ -2657,6 +2676,62 @@
     return list.find((u) => u.nickname.toLowerCase() === nickname.toLowerCase());
   }
 
+  // -- Progresso por conta (dificuldades secretas desbloqueadas +
+  //    estatísticas do dashboard) — igual a usuários/ranking, também
+  //    sincronizado pelo JSONBin, senão uma conta só "lembra" o
+  //    progresso na máquina onde foi usada da última vez. O
+  //    localStorage (via scopedKey) continua sendo a fonte rápida e
+  //    que funciona offline; o JSONBin é o que faz o progresso viajar
+  //    entre máquinas. --
+  async function pullGlobalProgress(nickname) {
+    if (!JSONBIN_CONFIGURED || !nickname) return null;
+    const record = await fetchBinRecord();
+    if (!record || typeof record.progress !== 'object' || !record.progress) return null;
+    return record.progress[nickname.toLowerCase()] || null;
+  }
+
+  async function pushGlobalProgress(nickname, patch) {
+    if (!JSONBIN_CONFIGURED || !nickname) return false;
+    const record = (await fetchBinRecord()) || {};
+    const progress = (record.progress && typeof record.progress === 'object') ? record.progress : {};
+    const key = nickname.toLowerCase();
+    progress[key] = { ...(progress[key] || {}), ...patch };
+    return writeBinRecord({ ...record, progress });
+  }
+
+  // Puxa o progresso global (se houver) pra dentro do localStorage
+  // deste navegador — chamado logo após login/cadastro, pra máquina
+  // "pegar" o progresso que a conta já tinha em outro lugar. Só
+  // AVANÇA o progresso local (nunca destrava algo que o servidor não
+  // confirma, e nunca apaga algo que só existe localmente ainda sem
+  // ter sido sincronizado).
+  async function syncProgressFromGlobal(nickname) {
+    if (!JSONBIN_CONFIGURED) return;
+    const remote = await pullGlobalProgress(nickname);
+    if (!remote) return;
+    if (remote.architectUnlocked) {
+      try { localStorage.setItem(scopedKey(ARCHITECT_UNLOCK_KEY), '1'); } catch (e) {}
+    }
+    if (remote.impossibleUnlocked) {
+      try { localStorage.setItem(scopedKey(IMPOSSIBLE_UNLOCK_KEY), '1'); } catch (e) {}
+    }
+    if (remote.stats && typeof remote.stats === 'object') {
+      const local = loadStats();
+      // Mescla pegando o maior/mais alto de cada campo — assim, jogar
+      // em duas máquinas sem internet por um tempo não faz uma
+      // sobrescrever o progresso da outra, os dois se somam/mantêm o
+      // melhor.
+      const merged = {
+        gamesPlayed: Math.max(local.gamesPlayed || 0, remote.stats.gamesPlayed || 0),
+        bestScore: Math.max(local.bestScore || 0, remote.stats.bestScore || 0),
+        totalDocsRecovered: Math.max(local.totalDocsRecovered || 0, remote.stats.totalDocsRecovered || 0),
+        totalCorrect: Math.max(local.totalCorrect || 0, remote.stats.totalCorrect || 0),
+        totalAnswers: Math.max(local.totalAnswers || 0, remote.stats.totalAnswers || 0),
+      };
+      saveStats(merged);
+    }
+  }
+
   async function signupAccount(nickname, password) {
     const existing = await findUserByNickname(nickname);
     if (existing) return { ok: false, reason: 'Esse apelido já está em uso. Escolha outro ou faça login.' };
@@ -2681,7 +2756,7 @@
 
   function loadStats() {
     try {
-      return JSON.parse(localStorage.getItem(STATS_KEY)) || {
+      return JSON.parse(localStorage.getItem(scopedKey(STATS_KEY))) || {
         gamesPlayed: 0, bestScore: 0, totalDocsRecovered: 0, totalCorrect: 0, totalAnswers: 0,
       };
     } catch (e) {
@@ -2689,7 +2764,9 @@
     }
   }
   function saveStats(stats) {
-    try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch (e) {}
+    try { localStorage.setItem(scopedKey(STATS_KEY), JSON.stringify(stats)); } catch (e) {}
+    const session = loadSession();
+    if (session && session.nickname) pushGlobalProgress(session.nickname, { stats });
   }
 
   // Chamado ao fim de toda partida (vitória ou derrota) para alimentar o dashboard.
@@ -4576,17 +4653,28 @@
         ? await signupAccount(nickname, password)
         : await loginAccount(nickname, password);
 
-      submitBtn.disabled = false;
-      submitBtn.textContent = originalLabel;
-
       if (!result.ok) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
         errEl.textContent = result.reason;
         errEl.hidden = false;
         return;
       }
 
-      errEl.hidden = true;
+      // Puxa o progresso dessa conta de outras máquinas (dificuldades
+      // secretas + estatísticas) antes de entrar no menu — assim, uma
+      // conta que já tinha coisa desbloqueada em outro aparelho chega
+      // aqui já com tudo liberado, em vez de parecer "zerada" só por
+      // estar rodando num navegador novo. Precisa salvar a sessão
+      // ANTES de sincronizar: scopedKey() usa a sessão atual pra saber
+      // em qual "gaveta" local gravar o progresso puxado.
       saveSession({ nickname, loginAt: new Date().toISOString() });
+      submitBtn.textContent = 'SINCRONIZANDO…';
+      await syncProgressFromGlobal(nickname);
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+
+      errEl.hidden = true;
       updateTerminalOperatorLabel();
       showScreen('screen-menu');
     });

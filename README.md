@@ -86,6 +86,8 @@ Enquanto esses dois campos não forem preenchidos, o jogo detecta isso automatic
 
 ## Resetar ou consolidar o ranking
 
+O progresso de cada conta (dificuldades secretas desbloqueadas e as estatísticas do dashboard) é salvo por conta — não pelo navegador. Ao entrar (login ou cadastro) com o JSONBin configurado, o jogo sincroniza automaticamente: puxa o que essa conta já tinha desbloqueado em outras máquinas para este navegador, e sempre que algo novo é desbloqueado aqui, manda para o JSONBin também. Assim, uma conta que já venceu a Difícil em um computador aparece com "O Arquiteto" liberado em qualquer outro navegador em que fizer login — sem precisar vencer de novo.
+
 O ranking já mantém automaticamente só o **recorde** de cada jogador por dificuldade (uma pontuação nova só substitui a salva se for maior). A cada carregamento do jogo, o ranking local (deste navegador) passa por uma consolidação automática e silenciosa que remove qualquer entrada antiga/duplicada que tenha sobrado de antes dessa regra — não precisa fazer nada pra isso acontecer.
 
 Para o ranking **global** (JSONBin, compartilhado entre todo mundo que joga) ou pra **apagar tudo**, isso não roda sozinho de propósito — é uma ação manual, feita pelo console do navegador (F12 → aba "Console"), com o jogo aberto:
