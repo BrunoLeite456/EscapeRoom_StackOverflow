@@ -83,3 +83,31 @@ O ranking de pontuações e as contas de usuário (apelido + senha) são salvos 
 Enquanto esses dois campos não forem preenchidos, o jogo detecta isso automaticamente e usa só dados locais — nada quebra. Depois de configurado, contas de cadastro e pontuações passam a ser compartilhadas entre qualquer navegador/aparelho que acessar o jogo.
 
 **Sobre a segurança da senha**: como o site não tem servidor próprio, a senha é transformada em hash (SHA-256) no próprio navegador antes de ser enviada — ela nunca é salva ou trafega em texto puro. Ainda assim, a chave de acesso ao JSONBin fica visível no código-fonte (normal para esse tipo de serviço) e a Access Key restrita limita o dano possível a "ler e atualizar esse bin específico". Para um projeto acadêmico isso é um nível de segurança adequado; não seria para um sistema de produção com dados sensíveis reais.
+
+## Resetar ou consolidar o ranking
+
+O ranking já mantém automaticamente só o **recorde** de cada jogador por dificuldade (uma pontuação nova só substitui a salva se for maior). A cada carregamento do jogo, o ranking local (deste navegador) passa por uma consolidação automática e silenciosa que remove qualquer entrada antiga/duplicada que tenha sobrado de antes dessa regra — não precisa fazer nada pra isso acontecer.
+
+Para o ranking **global** (JSONBin, compartilhado entre todo mundo que joga) ou pra **apagar tudo**, isso não roda sozinho de propósito — é uma ação manual, feita pelo console do navegador (F12 → aba "Console"), com o jogo aberto:
+
+```js
+ArquitetoAdmin.consolidarLocal()        // limpa duplicatas no ranking deste navegador (já roda sozinho, mas pode rodar de novo a qualquer momento)
+await ArquitetoAdmin.consolidarGlobal() // mesma limpeza, só que no ranking global (JSONBin) — afeta todo mundo, precisa de rede
+ArquitetoAdmin.resetarLocal()           // apaga TODO o ranking e o Salão da Fama deste navegador
+await ArquitetoAdmin.resetarGlobal()    // apaga TODAS as pontuações e o Salão da Fama do ranking global — irreversível
+await ArquitetoAdmin.resetarTudo()      // local + global de uma vez
+```
+
+Pra tirar só **um registro específico** em vez do ranking inteiro (ex: um nome ou pontuação de teste que ficou salva):
+
+```js
+ArquitetoAdmin.removerEntradaLocal('NOME', 'dificil')          // remove esse jogador dessa dificuldade, só do ranking local
+await ArquitetoAdmin.removerEntradaGlobal('NOME', 'dificil')   // mesma remoção, no ranking global (JSONBin)
+ArquitetoAdmin.removerDoHallLocal('NOME')                      // remove do Salão da Fama (modo Impossível) local
+await ArquitetoAdmin.removerDoHallGlobal('NOME')               // remove do Salão da Fama global
+```
+
+As dificuldades válidas são `facil`, `medio` ou `dificil` (o Salão da Fama não usa dificuldade, só nome).
+
+Nenhuma dessas ações mexe nas contas de usuário (apelido/senha) — só no ranking e no Salão da Fama.
+

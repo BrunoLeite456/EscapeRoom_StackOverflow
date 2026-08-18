@@ -436,8 +436,8 @@
       const el = document.createElement('div');
       el.className = 'error-glitch-line';
       el.textContent = text;
-      el.style.left = `${rand(4, 62)}%`;
-      el.style.top = `${rand(6, 82)}%`;
+      el.style.left = `${rand(3, 78)}%`;
+      el.style.top = `${rand(4, 90)}%`;
       container.appendChild(el);
       setTimeout(() => el.remove(), 1450);
     }
@@ -452,17 +452,62 @@
         g.className = 'bug-glyph';
         g.textContent = BUG_GLYPHS[randInt(0, BUG_GLYPHS.length - 1)];
         g.style.left = `${rand(2, 96)}%`;
-        g.style.top = `${rand(30, 90)}%`;
+        g.style.top = `${rand(6, 94)}%`;
         g.style.animationDuration = `${rand(0.6, 1.3)}s`;
         container.appendChild(g);
         setTimeout(() => g.remove(), 1400);
       }
     }
 
+    // -- Trecho de "código" verde-fósforo que atravessa a tela e se
+    //    corrompe no meio (ver .code-corrupt-line no CSS) — reforço de
+    //    destruição extra usado na fase do chefão, além dos glifos e
+    //    popups de erro já existentes. --
+    const CODE_CORRUPT_SNIPPETS = [
+      '0xFF3D5A::core.integrity--',
+      'while(architect.alive){ decay++; }',
+      'segfault @ 0x00A3F9',
+      'DELETE FROM nucleo WHERE id=SELF',
+      'try{ hold(); }catch(e){ collapse(); }',
+      'contenção.status = FALHOU',
+      '10110011 CORROMPIDO 01101',
+    ];
+    function codeCorruptLine(container) {
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'code-corrupt-line';
+      el.textContent = CODE_CORRUPT_SNIPPETS[randInt(0, CODE_CORRUPT_SNIPPETS.length - 1)];
+      el.style.left = `${rand(2, 80)}%`;
+      el.style.top = `${rand(3, 92)}%`;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 950);
+    }
+
+    // -- Estilhaço dinâmico: várias rachaduras curtas "explodindo" de um
+    //    ponto aleatório, em ângulos diferentes — camada extra de vidro
+    //    quebrando por cima das rachaduras fixas do palco. --
+    function crackBurst(container, count = 6) {
+      if (!container) return;
+      const originX = rand(6, 94);
+      const originY = rand(6, 94);
+      for (let i = 0; i < count; i++) {
+        const s = document.createElement('div');
+        s.className = 'crack-shard';
+        const angle = (360 / count) * i + rand(-15, 15);
+        const len = rand(40, 110);
+        s.style.left = `${originX}%`;
+        s.style.top = `${originY}%`;
+        s.style.transform = `rotate(${angle}deg)`;
+        s.style.setProperty('--shard-len', `${len}px`);
+        container.appendChild(s);
+        setTimeout(() => s.remove(), 550);
+      }
+    }
+
     return {
       startNoiseLoop, stopNoiseLoop, startMonitorNoiseLoop, stopMonitorNoiseLoop,
       shake, glitchPulse, whiteFlash, blackout, setCorruptionLevel, spawnParticles,
-      errorPopup, bugSwarmBurst,
+      errorPopup, bugSwarmBurst, codeCorruptLine, crackBurst,
     };
   })();
 
@@ -3510,6 +3555,178 @@
     return globalResult;
   }
 
+  // ---------------------------------------------------------------------
+  // ADMIN — reset e consolidação do ranking (uso manual, via console do
+  // navegador). Não é exposto na interface de propósito: o ranking
+  // global fica no mesmo JSONBin pra todo mundo que joga, então limpar
+  // ou consolidar precisa ser uma ação deliberada de quem administra o
+  // bin, não um botão que qualquer jogador possa apertar sem querer.
+  //
+  // Uso (abra o console do navegador — F12 — na tela do jogo e rode):
+  //   ArquitetoAdmin.consolidarLocal()        → mantém só o recorde de
+  //     cada jogador por dificuldade no ranking salvo NESTE navegador
+  //     (localStorage), apagando entradas antigas duplicadas/inferiores.
+  //   await ArquitetoAdmin.consolidarGlobal() → mesma limpeza, mas no
+  //     ranking global (JSONBin) — afeta todo mundo. Precisa de rede.
+  //   ArquitetoAdmin.resetarLocal()           → apaga TODO o ranking e
+  //     o Salão da Fama salvos neste navegador (não mexe na conta).
+  //   await ArquitetoAdmin.resetarGlobal()    → apaga TODAS as pontuações
+  //     e o Salão da Fama do ranking global (JSONBin) — irreversível,
+  //     afeta todo mundo que já jogou. Contas de usuário não são tocadas.
+  //   await ArquitetoAdmin.resetarTudo()      → local + global de uma vez.
+  // ---------------------------------------------------------------------
+
+  // Mantém, dentro de uma lista de pontuações, só a maior por
+  // nome+dificuldade (comparação sem diferenciar maiúsc./minúsc.) —
+  // mesma regra de upsertBestEntry, mas aplicada de uma vez sobre uma
+  // lista que pode ter ficado com duplicatas de antes dessa regra
+  // existir. Devolve uma lista nova; não muda a original.
+  function dedupeScoresToRecords(list) {
+    const best = new Map();
+    (Array.isArray(list) ? list : []).forEach((entry) => {
+      if (!entry || !entry.name || !entry.difficulty) return;
+      const key = `${entry.difficulty}::${entry.name.toLowerCase()}`;
+      const current = best.get(key);
+      if (!current || entry.score > current.score) best.set(key, entry);
+    });
+    return Array.from(best.values());
+  }
+
+  function consolidarRankingLocal() {
+    const before = loadRanking();
+    const after = dedupeScoresToRecords(before);
+    saveRanking(after);
+    const removed = before.length - after.length;
+    console.log(`[ArquitetoAdmin] Ranking local consolidado: ${removed} entrada(s) antiga(s)/duplicada(s) removida(s), ${after.length} recorde(s) mantido(s).`);
+    return after;
+  }
+
+  async function consolidarRankingGlobal() {
+    if (!JSONBIN_CONFIGURED) {
+      console.warn('[ArquitetoAdmin] JSONBin não configurado — não há ranking global pra consolidar.');
+      return null;
+    }
+    const record = (await fetchBinRecord()) || {};
+    const before = Array.isArray(record.scores) ? record.scores : [];
+    const after = dedupeScoresToRecords(before)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_GLOBAL_ENTRIES);
+    const ok = await writeBinRecord({ ...record, scores: after });
+    if (ok) {
+      console.log(`[ArquitetoAdmin] Ranking global consolidado: ${before.length - after.length} entrada(s) antiga(s)/duplicada(s) removida(s), ${after.length} recorde(s) mantido(s).`);
+    } else {
+      console.warn('[ArquitetoAdmin] Falha ao gravar o ranking global consolidado (ver rede/JSONBin).');
+    }
+    return ok ? after : null;
+  }
+
+  function resetarRankingLocal() {
+    saveRanking([]);
+    saveHall([]);
+    console.log('[ArquitetoAdmin] Ranking e Salão da Fama locais (deste navegador) apagados.');
+  }
+
+  async function resetarRankingGlobal() {
+    if (!JSONBIN_CONFIGURED) {
+      console.warn('[ArquitetoAdmin] JSONBin não configurado — não há ranking global pra apagar.');
+      return false;
+    }
+    const record = (await fetchBinRecord()) || {};
+    const ok = await writeBinRecord({ ...record, scores: [], impossibleHall: [] });
+    if (ok) console.log('[ArquitetoAdmin] Ranking e Salão da Fama globais (JSONBin) apagados. Contas de usuário mantidas.');
+    else console.warn('[ArquitetoAdmin] Falha ao apagar o ranking global (ver rede/JSONBin).');
+    return ok;
+  }
+
+  async function resetarRankingTudo() {
+    resetarRankingLocal();
+    await resetarRankingGlobal();
+  }
+
+  // Remove só UMA entrada específica (nome + dificuldade), em vez de
+  // apagar o ranking inteiro — pra tirar um registro pontual (nome
+  // errado, pontuação de teste etc.) sem afetar o resto. Comparação de
+  // nome sem diferenciar maiúsc./minúsc., igual ao resto do ranking.
+  function removerEntradaLocal(nome, dificuldade) {
+    const before = loadRanking();
+    const after = before.filter((e) => !(
+      (e.name || '').toLowerCase() === String(nome).toLowerCase()
+      && e.difficulty === dificuldade
+    ));
+    saveRanking(after);
+    const removed = before.length - after.length;
+    console.log(removed
+      ? `[ArquitetoAdmin] Removida a entrada de "${nome}" em "${dificuldade}" do ranking local.`
+      : `[ArquitetoAdmin] Nenhuma entrada de "${nome}" em "${dificuldade}" encontrada no ranking local.`);
+    return after;
+  }
+
+  async function removerEntradaGlobal(nome, dificuldade) {
+    if (!JSONBIN_CONFIGURED) {
+      console.warn('[ArquitetoAdmin] JSONBin não configurado — não há ranking global pra editar.');
+      return null;
+    }
+    const record = (await fetchBinRecord()) || {};
+    const before = Array.isArray(record.scores) ? record.scores : [];
+    const after = before.filter((e) => !(
+      (e.name || '').toLowerCase() === String(nome).toLowerCase()
+      && e.difficulty === dificuldade
+    ));
+    const ok = await writeBinRecord({ ...record, scores: after });
+    const removed = before.length - after.length;
+    if (ok) {
+      console.log(removed
+        ? `[ArquitetoAdmin] Removida a entrada de "${nome}" em "${dificuldade}" do ranking global.`
+        : `[ArquitetoAdmin] Nenhuma entrada de "${nome}" em "${dificuldade}" encontrada no ranking global.`);
+    } else {
+      console.warn('[ArquitetoAdmin] Falha ao gravar a remoção no ranking global (ver rede/JSONBin).');
+    }
+    return ok ? after : null;
+  }
+
+  // Remove `nome` do Salão da Fama do modo Impossível (local e, se
+  // configurado, global) — separado do ranking por pontuação.
+  function removerDoHallLocal(nome) {
+    const before = loadHall();
+    const after = before.filter((e) => (e.name || '').toLowerCase() !== String(nome).toLowerCase());
+    saveHall(after);
+    console.log(before.length !== after.length
+      ? `[ArquitetoAdmin] "${nome}" removido do Salão da Fama local.`
+      : `[ArquitetoAdmin] "${nome}" não estava no Salão da Fama local.`);
+    return after;
+  }
+
+  async function removerDoHallGlobal(nome) {
+    if (!JSONBIN_CONFIGURED) {
+      console.warn('[ArquitetoAdmin] JSONBin não configurado — não há Salão da Fama global pra editar.');
+      return null;
+    }
+    const record = (await fetchBinRecord()) || {};
+    const before = Array.isArray(record.impossibleHall) ? record.impossibleHall : [];
+    const after = before.filter((e) => (e.name || '').toLowerCase() !== String(nome).toLowerCase());
+    const ok = await writeBinRecord({ ...record, impossibleHall: after });
+    if (ok) {
+      console.log(before.length !== after.length
+        ? `[ArquitetoAdmin] "${nome}" removido do Salão da Fama global.`
+        : `[ArquitetoAdmin] "${nome}" não estava no Salão da Fama global.`);
+    } else {
+      console.warn('[ArquitetoAdmin] Falha ao gravar a remoção no Salão da Fama global (ver rede/JSONBin).');
+    }
+    return ok ? after : null;
+  }
+
+  window.ArquitetoAdmin = {
+    consolidarLocal: consolidarRankingLocal,
+    consolidarGlobal: consolidarRankingGlobal,
+    resetarLocal: resetarRankingLocal,
+    resetarGlobal: resetarRankingGlobal,
+    resetarTudo: resetarRankingTudo,
+    removerEntradaLocal,
+    removerEntradaGlobal,
+    removerDoHallLocal,
+    removerDoHallGlobal,
+  };
+
   // Mostra o Salão da Fama na tela de vitória do modo Impossível: os
   // nomes que já estavam lá aparecem direto, e — só se esse jogador
   // acabou de entrar pela primeira vez — o nome dele é "escrito" com
@@ -3707,6 +3924,80 @@
      os pulsos de destruição fiquem sempre grudados no som de verdade,
      sem dessincronizar com o tempo.
      ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------
+     11a. CHUVA DE CÓDIGO ESTILO "MATRIX" — camada extra de destruição
+     visual da fase do chefão, desenhada em <canvas> por trás das
+     raias. Colunas de glifos verde-fósforo caindo, com uma delas
+     "acesa" (mais brilhante) por coluna — o clássico efeito Matrix.
+     Intensidade (velocidade de queda + taxa de troca de caracteres)
+     sobe junto com o patamar real de corrupção (setIntensity, chamado
+     por GuitarHero.updateStageCorruption). Puramente decorativo, não
+     afeta a jogabilidade nem o áudio.
+     ------------------------------------------------------------------ */
+  const MatrixRain = (() => {
+    const CHARS = '01アイウエオカキクケコサシスセソ0123456789#$%&¬§ARQUITETO'.split('');
+    let canvas = null, ctx = null, cols = [], speeds = [], rafId = null, running = false;
+    let intensity = 0; // 0..4, controla velocidade e densidade de troca
+    const FONT_SIZE = 15;
+
+    function resize() {
+      if (!canvas) return;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      const colCount = Math.ceil(canvas.width / FONT_SIZE) + 1;
+      cols = new Array(colCount).fill(0).map(() => rand(-40, 0));
+      speeds = new Array(colCount).fill(0).map(() => rand(0.55, 1.15));
+    }
+
+    function draw() {
+      if (!running || !ctx) return;
+      const w = canvas.width, h = canvas.height;
+      // rastro semitransparente por cima do frame anterior = efeito de cauda
+      ctx.fillStyle = `rgba(5,5,6,${0.16 + intensity * 0.03})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.font = `${FONT_SIZE}px var(--font-mono), monospace`;
+      const speedMul = 1 + intensity * 0.55;
+      cols.forEach((y, i) => {
+        const x = i * FONT_SIZE;
+        const ch = CHARS[randInt(0, CHARS.length - 1)];
+        // caractere "de cabeça", mais brilhante — a ponta viva da coluna
+        ctx.fillStyle = 'rgba(220,255,230,0.95)';
+        ctx.fillText(ch, x, y);
+        ctx.fillStyle = intensity >= 3 && Math.random() < 0.08
+          ? 'rgba(255,60,70,0.85)' // glifo "infectado" de vermelho nos patamares altos
+          : `rgba(57,255,122,${0.5 + intensity * 0.08})`;
+        ctx.fillText(CHARS[randInt(0, CHARS.length - 1)], x, y - FONT_SIZE);
+        cols[i] += speeds[i] * speedMul;
+        if (cols[i] * FONT_SIZE > h && Math.random() > 0.975) cols[i] = rand(-20, 0);
+      });
+      rafId = requestAnimationFrame(draw);
+    }
+
+    function start(hostEl) {
+      canvas = el2('gh-matrix-canvas');
+      if (!canvas) return;
+      ctx = canvas.getContext('2d');
+      resize();
+      running = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(draw);
+    }
+
+    function stop() {
+      running = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function setIntensity(tier) { intensity = clamp(tier, 0, 4); }
+    function el2(id) { return document.getElementById(id); }
+    window.addEventListener('resize', () => { if (running) resize(); });
+
+    return { start, stop, setIntensity, resize };
+  })();
+
   const GuitarHero = (() => {
     const LANE_KEYS = ['d', 'f', 'j', 'k'];
     const LANE_COLORS = ['#3dff6e', '#ff3d5a', '#ffe23d', '#3dc8ff'];
@@ -3714,6 +4005,7 @@
     const PERFECT_WINDOW = 0.065; // dentro disso conta como "perfeito"
     const TRAVEL_TIME = 1.55;     // segundos que a nota leva do topo até a linha de acerto
     const MISS_PENALTY = 12;
+    const WRONG_PENALTY = 8; // tecla errada / fora do tempo — penalidade menor que perder a nota, mas ainda pune
     const HIT_REGEN = 2;
     const BPM = 172; // andamento real de "Núcleo em Colapso", detectado por análise de áudio
 
@@ -3778,8 +4070,8 @@
       if (!layer) return;
       const div = document.createElement('div');
       div.className = 'gh-note';
-      div.style.left = `calc(${note.lane * 25}% + 3.5%)`;
-      div.style.width = '18%';
+      div.style.left = `calc(${note.lane * 25}% + 2%)`;
+      div.style.width = '21%';
       div.style.background = LANE_COLORS[note.lane];
       div.style.boxShadow = `0 0 10px 1px ${LANE_COLORS[note.lane]}`;
       layer.appendChild(div);
@@ -3808,7 +4100,19 @@
         const diff = elapsed - n.time;
         if (Math.abs(diff) <= HIT_WINDOW && Math.abs(diff) < bestDiff) { best = n; bestDiff = diff; }
       });
-      if (!best) return; // "toque em vazio": sem punição, como na maioria dos jogos de ritmo
+      if (!best) {
+        // Tecla errada: nenhuma nota daquela raia dentro da janela de
+        // acerto agora — antes não punia, o que deixava o modo Impossível
+        // fácil demais só de martelar tecla. Agora conta como erro:
+        // quebra o combo e desconta vida (vida única zera na hora, igual
+        // a uma nota perdida).
+        combo = 0;
+        health = activeOpts.oneLife ? 0 : clamp(health - WRONG_PENALTY, 0, 100);
+        showFeedback('ERRADO', 'fb-miss');
+        updateHud();
+        if (health <= 0) endRun('fail');
+        return;
+      }
       best.hit = true;
       hits += 1;
       const tier = judgeHit(bestDiff);
@@ -3846,6 +4150,10 @@
         if (n.el && !n.hit && !n.missed) {
           const progress = clamp((elapsed - spawnTime) / TRAVEL_TIME, 0, 1.3);
           n.el.style.top = `${progress * 86}%`;
+          // dentro da janela de acerto (ou perto dela): destaca a nota
+          // pra deixar claro visualmente que é a hora de apertar.
+          const nearHit = Math.abs(elapsed - n.time) <= HIT_WINDOW * 1.8;
+          n.el.classList.toggle('gh-note-near', nearHit);
         }
         if (!n.hit && !n.missed && elapsed > n.time + HIT_WINDOW) markMissed(n);
       });
@@ -3903,6 +4211,7 @@
     function updateStageCorruption(elapsed) {
       const tier = tierForElapsed(elapsed);
       BossMusic.setTier(tier);
+      MatrixRain.setIntensity(tier);
       const coreEl = el('gh-core-value');
       if (coreEl) {
         const climaxEnd = TIER_BOUNDS[TIER_BOUNDS.length - 1];
@@ -3922,9 +4231,15 @@
       }
       if (risingTier && tier > 0) {
         const layer = ensureFxLayer();
-        FX.bugSwarmBurst(layer, 3 + tier * 2);
+        FX.bugSwarmBurst(layer, 4 + tier * 3);
+        FX.crackBurst(layer, 4 + tier * 2);
         const pool = ARCHITECT_BUG_MESSAGES[tier] || ARCHITECT_BUG_MESSAGES[3];
         FX.errorPopup(layer, pool[randInt(0, pool.length - 1)]);
+        // rajada de "código" corrompendo junto — mais linhas quanto
+        // mais alto o patamar, reforçando a destruição visual.
+        for (let i = 0; i < tier; i++) {
+          setTimeout(() => FX.codeCorruptLine(layer), i * 140);
+        }
         AudioEngine.staticBurst(0.22);
         stage.classList.remove('gh-invert-flash');
         void stage.offsetWidth;
@@ -3940,6 +4255,8 @@
           // reta final antes do colapso: rajada dupla, o Arquiteto está
           // por um fio.
           setTimeout(() => FX.errorPopup(layer, pool[randInt(0, pool.length - 1)]), 260);
+          setTimeout(() => FX.codeCorruptLine(layer), 400);
+          setTimeout(() => FX.crackBurst(layer, 8), 200);
           try { AudioEngine.alarm(); } catch (e) {}
         }
       }
@@ -3966,13 +4283,15 @@
 
       if (tier >= 2 && (isDownbeat || tier >= 3)) {
         const layer = ensureFxLayer();
-        FX.bugSwarmBurst(layer, tier >= 4 ? 3 : 1);
+        FX.bugSwarmBurst(layer, tier >= 4 ? 5 : 2);
+        if (tier >= 4 && isDownbeat) FX.crackBurst(layer, 5);
       }
       if (tier >= 3 && isDownbeat) {
         stage.classList.remove('gh-chroma-flicker');
         void stage.offsetWidth;
         stage.classList.add('gh-chroma-flicker');
         setTimeout(() => stage.classList.remove('gh-chroma-flicker'), 180);
+        if (Math.random() < 0.5) FX.codeCorruptLine(ensureFxLayer());
       }
       if (tier >= 4) {
         if (isDownbeat) {
@@ -4021,6 +4340,7 @@
       running = true;
       rafId = requestAnimationFrame(loop);
       BossMusic.start();
+      MatrixRain.start();
     }
 
     // Sequência de colapso final — só quando a faixa é vencida de
@@ -4036,7 +4356,12 @@
       const layer = ensureFxLayer();
       try { FX.whiteFlash(420); AudioEngine.metalDoor(); } catch (e) {}
       if (stage) stage.classList.add('gh-collapsed');
+      MatrixRain.setIntensity(4);
       FX.bugSwarmBurst(layer, 26);
+      FX.crackBurst(layer, 10);
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => FX.codeCorruptLine(layer), 100 + i * 220);
+      }
       ARCHITECT_FINAL_MESSAGES.forEach((msg, i) => {
         setTimeout(() => FX.errorPopup(layer, msg), 150 + i * 240);
       });
@@ -4049,6 +4374,8 @@
         }
         try { AudioEngine.staticBurst(0.25); } catch (e) {}
         if (stutters % 2 === 0) FX.bugSwarmBurst(layer, 5);
+        if (stutters % 2 === 1) FX.codeCorruptLine(layer);
+        FX.crackBurst(layer, 4);
         stutters += 1;
         if (stutters >= 5) {
           clearInterval(stutterInterval);
@@ -4059,7 +4386,7 @@
       // Deixa o interlúdio real tocar por baixo do resultado por um
       // tempo, depois esmaece sozinho — sem cortar o momento, mas sem
       // tocar pra sempre caso o jogador fique parado na tela final.
-      setTimeout(() => { BossMusic.stop(); }, 13000);
+      setTimeout(() => { BossMusic.stop(); MatrixRain.stop(); }, 13000);
     }
 
     function endRun(cause) {
@@ -4072,7 +4399,7 @@
       const totalNotes = chart.notes.length;
       const accuracy = totalNotes ? Math.round((hits / totalNotes) * 100) : 0;
 
-      if (cause === 'fail') { BossMusic.stop(true); } // corte seco — sem outro
+      if (cause === 'fail') { BossMusic.stop(true); MatrixRain.stop(); } // corte seco — sem outro
 
       // Etapa final da dificuldade Impossível: nada de tela de resultado
       // própria aqui — o placar volta pro jogo principal, que mostra o
@@ -4130,6 +4457,7 @@
       if (rafId) cancelAnimationFrame(rafId);
       detachKeys();
       BossMusic.stop(true);
+      MatrixRain.stop();
       const stage = el('gh-stage');
       if (stage) stage.classList.remove('gh-collapsed', 'gh-invert-flash', 'shake');
       if (fxLayerEl) fxLayerEl.innerHTML = '';
@@ -4188,6 +4516,12 @@
   }
 
   function init() {
+    // Consolida o ranking local automaticamente a cada carregamento:
+    // remove qualquer entrada antiga/duplicada que tenha sobrado de antes
+    // da regra de "só o recorde por jogador+dificuldade" existir. Rápido,
+    // só localStorage, sem rede — ver ArquitetoAdmin no console pra
+    // consolidar ou resetar o ranking global (JSONBin) manualmente.
+    consolidarRankingLocal();
     refreshDifficultyOptions();
     GuitarHero.bindUi();
     // Boot sequence rápido antes do login/menu

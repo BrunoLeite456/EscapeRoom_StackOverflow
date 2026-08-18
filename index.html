@@ -484,6 +484,11 @@
       <div class="gh-tech-circuit"></div>
     </div>
 
+    <!-- Chuva de código estilo Matrix — ver MatrixRain em script.js.
+         Intensidade (opacidade/velocidade) sobe com o patamar de
+         corrupção real da música. Puramente decorativo. -->
+    <canvas class="gh-matrix-canvas" id="gh-matrix-canvas" aria-hidden="true"></canvas>
+
     <!-- Destruição progressiva: conforme a fase avança (ver
          updateStageCorruption() em GuitarHero), o palco recebe as classes
          gh-corrupt-1/2/3 e essas rachaduras + esse ruído vão ficando mais
@@ -493,8 +498,21 @@
       <div class="gh-crack gh-crack-b"></div>
       <div class="gh-crack gh-crack-c"></div>
       <div class="gh-crack gh-crack-d"></div>
+      <div class="gh-crack gh-crack-e"></div>
+      <div class="gh-crack gh-crack-f"></div>
+      <div class="gh-crack gh-crack-g"></div>
+      <div class="gh-crack gh-crack-h"></div>
+      <div class="gh-crack gh-crack-i"></div>
+      <div class="gh-crack gh-crack-j"></div>
+      <div class="gh-crack gh-crack-k"></div>
+      <div class="gh-crack gh-crack-l"></div>
+      <div class="gh-crack gh-crack-m"></div>
+      <div class="gh-crack gh-crack-n"></div>
+      <div class="gh-crack gh-crack-o"></div>
+      <div class="gh-crack gh-crack-p"></div>
     </div>
     <div class="gh-noise-overlay" aria-hidden="true"></div>
+    <div class="gh-vignette-danger" aria-hidden="true"></div>
 
     <div class="gh-hud">
       <div class="gh-hud-block gh-hud-left">
@@ -518,6 +536,7 @@
       <div class="gh-lane" data-lane="1"></div>
       <div class="gh-lane" data-lane="2"></div>
       <div class="gh-lane" data-lane="3"></div>
+      <div class="gh-hitzone"></div>
       <div class="gh-hitline"></div>
       <div class="gh-notes-layer" id="gh-notes-layer"></div>
     </div>
