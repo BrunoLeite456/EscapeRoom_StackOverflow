@@ -532,8 +532,8 @@
     arquiteto: { label: 'O ARQUITETO', minutes: 0, segments: 1, scoreMultiplier: 1.0, hasBoss: false, isRhythmMode: true },
     // "Impossível" (novo) é a Difícil inteira, sem nenhuma história, com
     // O Arquiteto (o mesmo minigame de ritmo acima) anexado como etapa
-    // final — só que com uma única vida: um erro no ritmo encerra a
-    // corrida na hora. Ver goToNextPhase()/startFinalRhythmGauntlet().
+    // final — com a barra de vida normal (mesma do modo secreto avulso).
+    // Ver goToNextPhase()/startFinalRhythmGauntlet().
     // Liberado ao vencer O Arquiteto (a faixa inteira, sem falhar).
     impossivel:{ label: 'IMPOSSÍVEL', minutes: 45, segments: 1, scoreMultiplier: 1.5, hasBoss: false, isFinalGauntlet: true, noStory: true },
   };
@@ -2196,7 +2196,7 @@
     if (State.currentPhaseIndex >= State.phases.length) {
       // Na dificuldade Impossível não existe vitória normal nem cutscene
       // do C.O.N.T.R.A.: depois da 4ª fase é direto pra etapa final —
-      // O Arquiteto, com uma única vida. Ver startFinalRhythmGauntlet().
+      // O Arquiteto, com a barra de vida normal. Ver startFinalRhythmGauntlet().
       if ((DIFFICULTIES[State.difficulty] || {}).isFinalGauntlet) {
         startFinalRhythmGauntlet();
         return;
@@ -3475,13 +3475,14 @@
 
   // Etapa final da dificuldade Impossível: as 4 fases de sempre já
   // acabaram, sem cutscene nenhuma — agora é O Arquiteto, o mesmo
-  // minigame de ritmo do modo secreto, só que com uma única vida (ver
-  // GuitarHero.open({ oneLife: true }) e markMissed()). Sem narrativa
-  // nenhuma aqui: nem intro, nem monólogo de vitória.
+  // minigame de ritmo do modo secreto, com a barra de vida normal (a
+  // mesma do modo "O Arquiteto" avulso — ver GuitarHero.open() sem
+  // oneLife e markMissed()). Sem narrativa nenhuma aqui: nem intro, nem
+  // monólogo de vitória.
   function startFinalRhythmGauntlet() {
     stopGameLoops();
     showScreen('screen-guitarhero');
-    GuitarHero.open({ oneLife: true, final: true, onFinalEnd: finishImpossibleRun });
+    GuitarHero.open({ oneLife: false, final: true, onFinalEnd: finishImpossibleRun });
   }
 
   // Fecha a dificuldade Impossível assim que a etapa de ritmo termina
@@ -3506,8 +3507,8 @@
     titleEl.textContent = won ? 'IMPOSSÍVEL — VOCÊ SOBREVIVEU' : 'IMPOSSÍVEL — VOCÊ CAIU';
     titleEl.className = 'victory-title' + (won ? '' : ' ending-dark');
     $('#victory-sub').textContent = won
-      ? 'Quatro fases, uma vida, zero folga. Você concluiu a faixa inteira sem falhar uma vez.'
-      : 'Você chegou até O Arquiteto — mas com uma única vida, um erro basta.';
+      ? 'Quatro fases e, no fim, O Arquiteto — você derrubou o núcleo dele até o último acorde.'
+      : 'Você chegou até O Arquiteto, mas o núcleo dele resistiu até o fim da faixa.';
     $('#victory-eerie').textContent = `Combo máximo no ritmo: ${bestCombo}x · Precisão no ritmo: ${accuracy}%`;
 
     $('#v-time').textContent = formatTime(State.timeLeft);
@@ -4152,8 +4153,11 @@
     let keyHandler = null;
     let fxLayerEl = null; // camada de popups de erro + glifos de bug por cima do palco
     // Configuração da corrida atual (ver open()):
-    // - oneLife: qualquer nota perdida zera a vida na hora (dificuldade
-    //   Impossível, etapa final — ver markMissed()).
+    // - oneLife: qualquer nota perdida zera a vida na hora. Hoje não é
+    //   usado por nenhum modo do jogo (a etapa final da dificuldade
+    //   Impossível usa a barra de vida normal, igual ao modo secreto
+    //   avulso — ver startFinalRhythmGauntlet()), mas a opção continua
+    //   aqui, disponível, caso algum modo futuro precise dela.
     // - final: esta corrida é a etapa final da dificuldade Impossível, não
     //   o modo secreto avulso — pula a tela de resultado própria (gh-result)
     //   e devolve o resultado pro jogo principal via onFinalEnd().
@@ -4282,8 +4286,8 @@
         // Tecla errada: nenhuma nota daquela raia dentro da janela de
         // acerto agora — antes não punia, o que deixava o modo Impossível
         // fácil demais só de martelar tecla. Agora conta como erro:
-        // quebra o combo e desconta vida (vida única zera na hora, igual
-        // a uma nota perdida).
+        // quebra o combo e desconta vida (oneLife, se ativo em algum modo,
+        // zeraria na hora, igual a uma nota perdida — ver activeOpts).
         combo = 0;
         health = activeOpts.oneLife ? 0 : clamp(health - WRONG_PENALTY, 0, 100);
         showFeedback('ERRADO', 'fb-miss');
@@ -4306,8 +4310,9 @@
     function markMissed(note) {
       note.missed = true;
       combo = 0;
-      // Vida única (dificuldade Impossível): a primeira nota perdida já
-      // zera a vida, em vez de descontar aos poucos.
+      // oneLife (não usado hoje por nenhum modo — ver activeOpts): se
+      // ativo, a primeira nota perdida já zeraria a vida, em vez de
+      // descontar aos poucos.
       health = activeOpts.oneLife ? 0 : clamp(health - MISS_PENALTY, 0, 100);
       showFeedback('FALHOU', 'fb-miss');
       if (note.el) { note.el.classList.add('gh-note-missed'); removeNoteEl(note, 300); }
@@ -4659,11 +4664,11 @@
       const introTitle = el('gh-intro-title');
       const introText = el('gh-intro-text');
       if (introTitle) {
-        introTitle.textContent = activeOpts.final ? 'O ARQUITETO — VIDA ÚNICA' : 'O ARQUITETO';
+        introTitle.textContent = activeOpts.final ? 'O ARQUITETO — ETAPA FINAL' : 'O ARQUITETO';
       }
       if (introText) {
         introText.textContent = activeOpts.final
-          ? 'A etapa final do modo Impossível. Uma vida: a primeira nota perdida encerra a corrida.'
+          ? 'A etapa final do modo Impossível. Mesma barra de vida do combate normal: erros descontam vida, não encerram a corrida na hora.'
           : 'Nenhum requisito aqui. Nenhum PC quebrado. Só você, quatro teclas e o ritmo.';
       }
       el('gh-intro').hidden = false;
