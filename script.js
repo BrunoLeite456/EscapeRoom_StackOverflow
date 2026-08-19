@@ -192,7 +192,7 @@
         especificamente para este projeto (arquivo em
         assets/sounds/nucleo-em-colapso.*) — não é mais sintetizada ao
         vivo. Andamento e tonalidade reais, detectados por análise de
-        áudio: ~172 BPM, tom de Dó# menor.
+        áudio.
         Tocada com um <audio> comum (não passa pelo grafo do Web Audio
         API), o que evita problemas de CORS ao abrir o jogo direto do
         disco (file://) sem servidor. O andamento visual da fase
