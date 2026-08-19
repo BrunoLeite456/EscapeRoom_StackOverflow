@@ -240,43 +240,21 @@
         <span class="difficulty-desc">Pouco tempo, quase nenhuma margem. A sala racha rápido e cedo.</span>
       </button>
       <button class="difficulty-option difficulty-impossible" data-difficulty="arquiteto" id="diff-arquiteto" hidden>
-        <span class="difficulty-name">O ARQUITETO <span class="difficulty-tag">???</span></span>
+        <span class="difficulty-name">O ARQUITETO <span class="difficulty-tag" id="diff-arquiteto-tag">???</span></span>
         <span class="difficulty-meta">modo secreto desbloqueado</span>
         <span class="difficulty-desc">Esqueça requisitos, esqueça o PC. Só você, quatro teclas e a música.</span>
       </button>
       <button class="difficulty-option difficulty-impossible" data-difficulty="impossivel" id="diff-impossivel" hidden>
         <span class="difficulty-name">IMPOSSÍVEL <span class="difficulty-tag">???</span></span>
         <span class="difficulty-meta">1 segmento de integridade</span>
-        <span class="difficulty-desc">A Difícil inteira, sem uma linha de história — e no fim, O Arquiteto espera. Um erro, uma vida: sem segunda chance em nada.</span>
+        <span class="difficulty-desc">A Difícil inteira, sem uma linha de história — e no fim, o registro salvo da queda do Arquiteto espera pra ser refeito, com a mesma barra de vida do confronto normal.</span>
       </button>
-
-      <!-- "A Lista" — quem já venceu o modo Impossível. Fica ao lado da
-           própria opção, some/aparece junto com ela (ver
-           refreshDifficultyOptions() em script.js). Abre como popup por
-           cima de tudo (mesmo padrão do caderno de anotações), sem
-           efeito de máquina de escrever aqui — isso só acontece na hora
-           em que alguém passa de verdade (ver revealImpossibleHallOfFame). -->
-      <button class="hall-toggle-btn" id="hall-toggle-btn" hidden aria-expanded="false">📜 A LISTA</button>
     </div>
     <p class="difficulty-locked-hint" id="difficulty-locked-hint">Vença no modo DIFÍCIL para desbloquear algo... diferente.</p>
 
     <button class="menu-btn back-btn" data-back="screen-menu">&larr; VOLTAR</button>
   </div>
 </section>
-
-<!-- Popup d'"A Lista" — abre por cima de tudo ao clicar em "📜 A LISTA"
-     na tela de dificuldade. Deixa claro que só entra aqui quem realmente
-     terminou o modo Impossível (não é ranking por pontuação). -->
-<div class="hall-modal-overlay" id="difficulty-hall-overlay" hidden>
-  <div class="hall-modal-panel">
-    <div class="hall-modal-header">
-      <h3 class="hall-title"><strong>"A LISTA"</strong> QUEM JÁ DERROTOU O ARQUITETO</h3>
-      <button class="notebook-close" id="difficulty-hall-close-btn" aria-label="Fechar A Lista">✕</button>
-    </div>
-    <p class="hall-modal-note">Aqui só aparece quem conseguiu passar do Impossível — não é ranking por pontuação, é a ordem de quem chegou até o fim.</p>
-    <ol class="hall-list" id="difficulty-hall-list"></ol>
-  </div>
-</div>
 
 <!-- ============================================================
      TELA: INTRO NARRATIVA (TV antiga)
@@ -466,7 +444,7 @@
 <!-- ============================================================
      TELA: O ARQUITETO — GUITAR HERO EM TELA CHEIA
      Nada de PC, nada de fases de requisitos: reflexo puro. Reaproveitada
-     como etapa final (vida única) da dificuldade Impossível — ver
+     como etapa final (vida normal) da dificuldade Impossível — ver
      GuitarHero.open({ oneLife, final }) em script.js.
      Faixa "NÚCLEO EM COLAPSO" é uma composição original de verdade,
      gravada em assets/sounds/ e tocada por um <audio> comum (sem
@@ -565,14 +543,20 @@
     <div class="gh-overlay" id="gh-result" hidden>
       <h2 class="gh-overlay-title" id="gh-result-title">FIM DE JOGO</h2>
       <p class="gh-overlay-text" id="gh-result-sub"></p>
-      <div class="gh-result-stats">
-        <div class="stat-row"><span>Pontuação</span><strong id="gh-result-score"></strong></div>
-        <div class="stat-row"><span>Maior combo</span><strong id="gh-result-combo"></strong></div>
-        <div class="stat-row"><span>Precisão</span><strong id="gh-result-acc"></strong></div>
+      <!-- Desfecho narrativo digitado linha a linha, só quando a faixa é
+           vencida de verdade (ver runArchitectEndingSequence). Some/aparece
+           via JS; na derrota, fica sempre escondido. -->
+      <div class="gh-result-story" id="gh-result-story" hidden></div>
+      <div class="gh-result-reveal" id="gh-result-reveal">
+        <div class="gh-result-stats">
+          <div class="stat-row"><span>Pontuação</span><strong id="gh-result-score"></strong></div>
+          <div class="stat-row"><span>Maior combo</span><strong id="gh-result-combo"></strong></div>
+          <div class="stat-row"><span>Precisão</span><strong id="gh-result-acc"></strong></div>
+        </div>
+        <p class="victory-save-status" id="gh-save-status"></p>
+        <button class="menu-btn" id="gh-result-retry-btn">↺ TOCAR DE NOVO</button>
+        <button class="menu-btn gh-overlay-back" id="gh-result-menu-btn">VOLTAR AO MENU</button>
       </div>
-      <p class="victory-save-status" id="gh-save-status"></p>
-      <button class="menu-btn" id="gh-result-retry-btn">↺ TOCAR DE NOVO</button>
-      <button class="menu-btn gh-overlay-back" id="gh-result-menu-btn">VOLTAR AO MENU</button>
     </div>
 
   </div>
